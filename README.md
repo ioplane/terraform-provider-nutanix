@@ -28,7 +28,8 @@ Do not run these commands until M0 provides `./dev`. Build, test, lint, generati
 
 - [Approved foundation design](docs/superpowers/specs/2026-08-04-foundation-design.md)
 - [Approved foundation implementation plan](docs/superpowers/plans/2026-08-04-foundation.md)
-- [Architecture documentation (planned; not present yet)](docs/architecture/)
+- [Provider architecture](docs/architecture.md)
+- [Terraform provider contract](docs/contract.md)
 - [Engineering standards (planned; not present yet)](docs/standards/)
 - [Architecture decision records (planned; not present yet)](docs/adr/)
 - [Contribution guide](CONTRIBUTING.md)
