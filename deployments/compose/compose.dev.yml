@@ -1,6 +1,5 @@
 services:
   dev:
-    image: localhost/ioplane/terraform-provider-nutanix-dev:${NUTANIX_DEV_SUFFIX:-default}
     build:
       context: ../..
       dockerfile: deployments/containers/Containerfile.dev
@@ -8,8 +7,6 @@ services:
         OCI_VERSION: ${NUTANIX_DEV_VERSION:-0.0.0-dev}
         OCI_REVISION: ${NUTANIX_DEV_REVISION:-0000000000000000000000000000000000000000}
         OCI_CREATED: ${NUTANIX_DEV_CREATED:-1970-01-01T00:00:00Z}
-    container_name: nutanix-provider-dev-${NUTANIX_DEV_SUFFIX:-default}
-    hostname: nutanix-provider-dev-${NUTANIX_DEV_SUFFIX:-default}
     init: true
     working_dir: /workspace
     command: ["sleep", "infinity"]
@@ -35,8 +32,5 @@ services:
 
 volumes:
   go-mod-cache:
-    name: nutanix-provider-go-mod-${NUTANIX_DEV_SUFFIX:-default}
   go-build-cache:
-    name: nutanix-provider-go-build-${NUTANIX_DEV_SUFFIX:-default}
   uv-cache:
-    name: nutanix-provider-uv-${NUTANIX_DEV_SUFFIX:-default}
