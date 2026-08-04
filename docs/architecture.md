@@ -20,25 +20,29 @@ internal/capability
 internal/testserver
 ```
 
-The primary dependency direction is:
+Allowed dependencies are explicit:
 
-```text
-cmd -> provider -> service -> nutanix/<namespace> -> transport
-```
+| Package | Allowed imports and constraints |
+| --- | --- |
+| `cmd/terraform-provider-nutanix` | Imports `provider` only. |
+| `provider` | May import `service`, `capability`, and Terraform Plugin Framework. |
+| `service` | May import `nutanix/<namespace>`, `task`, `capability`, and Terraform Plugin Framework. |
+| `nutanix/<namespace>` | May import `transport` and `auth` as needed; never imports Terraform Plugin Framework. |
+| `task` | Imports `transport`; never imports Terraform Plugin Framework. |
+| `capability` | May import `nutanix/<namespace>` and `transport`; never imports Terraform Plugin Framework. |
+| `transport` | May import `auth`; never imports Terraform Plugin Framework. |
+| `auth` | Depends only on the Go standard library and project-neutral helpers; never imports Terraform Plugin Framework. |
+| `testserver` | May import production packages only for tests; no production package may import `testserver`. |
 
-Each package in this chain may depend only on packages to its right; no reverse
-dependency is allowed. `provider` assembles the Terraform Plugin Framework
-provider.
-`service` owns Terraform schemas, state models, and lifecycle behavior.
-`nutanix/<namespace>` owns namespace-specific DTOs and operations, while
-`transport` owns shared HTTP behavior. `auth`, `task`, and `capability` are
-focused support packages. `testserver` provides repository test support and is
-not a second production architecture.
+No reverse dependency or import cycle is allowed. `provider` assembles the
+Terraform provider; `service` owns Terraform schemas, state models, and
+lifecycle behavior; `nutanix/<namespace>` owns namespace-specific DTOs and
+operations; and `transport`, `auth`, `task`, and `capability` remain focused
+support packages.
 
-Packages under `internal/nutanix`, together with `transport`, `auth`, `task`,
-and `capability`, never import Terraform Plugin Framework. Catch-all Go
-packages named `api`, `core`, `common`, `types`, or `util` are forbidden;
-shared behavior belongs in a package with one concrete responsibility.
+Catch-all Go packages named `api`, `core`, `common`, `types`, or `util` are
+forbidden. Shared behavior belongs in a package with one concrete
+responsibility.
 
 ## Implementation boundary
 
@@ -48,10 +52,10 @@ design evidence and test inputs, not code-generation inputs. Nutanix SDKs are
 not runtime dependencies, and neither SDKs nor OpenAPI generate implementation
 code or public Terraform schemas.
 
-M0 establishes an empty provider served through Terraform Plugin Protocol 6.
-It registers no resource, data source, action, function, or ephemeral resource.
-Product behavior begins only in later phases after its public contract is
-approved.
+M0 will establish an empty provider served through Terraform Plugin Protocol
+6. It will register no resource, data source, action, function, or ephemeral
+resource. Product behavior begins only in later phases after its public
+contract is approved.
 
 ## Delivery phases
 

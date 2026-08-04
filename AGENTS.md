@@ -22,6 +22,15 @@ This file is the authoritative working contract for this repository.
 - Limit the host to normal Git/GitHub operations, the Podman control plane, and the pinned `uv` bootstrap/control plane.
 - Do not use host toolchains as completion evidence.
 
+### Temporary bootstrap exception
+
+Until Task 2 creates `./dev` and Task 3 initializes Beads, follow the approved
+foundation plan using only normal host Git/GitHub operations, Podman
+control-plane operations, and pinned `uv` bootstrap operations. Do not run
+nonexistent `./dev` or Beads commands. This exception does not permit host Go,
+Terraform, Task, tests, linters, generators, packaging, or live-system work.
+It expires automatically once both the launcher and tracker exist.
+
 ## Safety and evidence
 
 - Do not mutate a live system without an explicit acceptance contract and explicit authorization.
