@@ -1,0 +1,130 @@
+FROM docker.io/library/golang:1.26-trixie@sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7
+
+ARG TASK_VERSION=3.52.0
+ARG BEADS_VERSION=1.1.2
+ARG TERRAFORM_VERSION=1.15.8
+ARG GOLANGCI_LINT_VERSION=2.12.2
+ARG GORELEASER_VERSION=2.17.1
+ARG TFPLUGINDOCS_VERSION=0.25.0
+ARG GOVULNCHECK_VERSION=1.6.0
+ARG GH_VERSION=2.97.0
+ARG UV_VERSION=0.12.1
+
+ARG OCI_VERSION=0.0.0-dev
+ARG OCI_REVISION=0000000000000000000000000000000000000000
+ARG OCI_CREATED=1970-01-01T00:00:00Z
+
+LABEL org.opencontainers.image.title="Terraform Provider Nutanix Development Toolbox" \
+      org.opencontainers.image.description="Reproducible development toolbox for the Terraform Provider for Nutanix" \
+      org.opencontainers.image.source="https://github.com/ioplane/terraform-provider-nutanix" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="${OCI_VERSION}" \
+      org.opencontainers.image.revision="${OCI_REVISION}" \
+      org.opencontainers.image.created="${OCI_CREATED}" \
+      org.opencontainers.image.base.name="docker.io/library/golang:1.26-trixie" \
+      org.opencontainers.image.base.digest="sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7"
+
+ENV GOTOOLCHAIN=local \
+    CGO_ENABLED=0 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON=/usr/bin/python3 \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_CACHE_DIR=/opt/uv-cache \
+    PATH=/opt/venv/bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install --yes --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        curl \
+        git \
+        openssh-client \
+        python3 \
+        unzip; \
+    find /var/lib/apt/lists -mindepth 1 -delete
+
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "${arch}" in \
+        amd64) goreleaser_arch="x86_64"; uv_arch="x86_64" ;; \
+        arm64) goreleaser_arch="arm64"; uv_arch="aarch64" ;; \
+        *) echo "unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    tmp="$(mktemp -d)"; \
+    download() { curl --fail --location --silent --show-error --retry 3 --output "$2" "$1"; }; \
+    verify() { \
+        checksum_file="$1"; \
+        asset="$2"; \
+        awk -v asset="${asset}" '$2 == asset { print; found = 1 } END { if (!found) exit 1 }' \
+            "${checksum_file}" > "${tmp}/selected.sha256"; \
+        (cd "${tmp}" && sha256sum --check selected.sha256); \
+    }; \
+    task_asset="task_linux_${arch}.tar.gz"; \
+    download "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/${task_asset}" "${tmp}/${task_asset}"; \
+    download "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/task_checksums.txt" "${tmp}/task_checksums.txt"; \
+    verify "${tmp}/task_checksums.txt" "${task_asset}"; \
+    mkdir "${tmp}/task"; \
+    tar -xzf "${tmp}/${task_asset}" -C "${tmp}/task"; \
+    install -m 0755 "${tmp}/task/task" /usr/local/bin/task; \
+    beads_asset="beads_${BEADS_VERSION}_linux_${arch}.tar.gz"; \
+    download "https://github.com/gastownhall/beads/releases/download/v${BEADS_VERSION}/${beads_asset}" "${tmp}/${beads_asset}"; \
+    download "https://github.com/gastownhall/beads/releases/download/v${BEADS_VERSION}/checksums.txt" "${tmp}/beads_checksums.txt"; \
+    verify "${tmp}/beads_checksums.txt" "${beads_asset}"; \
+    mkdir "${tmp}/beads"; \
+    tar -xzf "${tmp}/${beads_asset}" -C "${tmp}/beads"; \
+    install -m 0755 "${tmp}/beads/bd" /usr/local/bin/bd; \
+    terraform_asset="terraform_${TERRAFORM_VERSION}_linux_${arch}.zip"; \
+    download "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/${terraform_asset}" "${tmp}/${terraform_asset}"; \
+    download "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_SHA256SUMS" "${tmp}/terraform_SHA256SUMS"; \
+    verify "${tmp}/terraform_SHA256SUMS" "${terraform_asset}"; \
+    unzip -q "${tmp}/${terraform_asset}" -d "${tmp}/terraform"; \
+    install -m 0755 "${tmp}/terraform/terraform" /usr/local/bin/terraform; \
+    golangci_lint_asset="golangci-lint-${GOLANGCI_LINT_VERSION}-linux-${arch}.tar.gz"; \
+    download "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/${golangci_lint_asset}" "${tmp}/${golangci_lint_asset}"; \
+    download "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION}-checksums.txt" "${tmp}/golangci-lint-checksums.txt"; \
+    verify "${tmp}/golangci-lint-checksums.txt" "${golangci_lint_asset}"; \
+    tar -xzf "${tmp}/${golangci_lint_asset}" -C "${tmp}"; \
+    install -m 0755 "${tmp}/golangci-lint-${GOLANGCI_LINT_VERSION}-linux-${arch}/golangci-lint" /usr/local/bin/golangci-lint; \
+    goreleaser_asset="goreleaser_Linux_${goreleaser_arch}.tar.gz"; \
+    download "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/${goreleaser_asset}" "${tmp}/${goreleaser_asset}"; \
+    download "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/checksums.txt" "${tmp}/goreleaser_checksums.txt"; \
+    verify "${tmp}/goreleaser_checksums.txt" "${goreleaser_asset}"; \
+    mkdir "${tmp}/goreleaser"; \
+    tar -xzf "${tmp}/${goreleaser_asset}" -C "${tmp}/goreleaser"; \
+    install -m 0755 "${tmp}/goreleaser/goreleaser" /usr/local/bin/goreleaser; \
+    tfplugindocs_asset="tfplugindocs_${TFPLUGINDOCS_VERSION}_linux_${arch}.zip"; \
+    download "https://github.com/hashicorp/terraform-plugin-docs/releases/download/v${TFPLUGINDOCS_VERSION}/${tfplugindocs_asset}" "${tmp}/${tfplugindocs_asset}"; \
+    download "https://github.com/hashicorp/terraform-plugin-docs/releases/download/v${TFPLUGINDOCS_VERSION}/tfplugindocs_${TFPLUGINDOCS_VERSION}_SHA256SUMS" "${tmp}/tfplugindocs_SHA256SUMS"; \
+    verify "${tmp}/tfplugindocs_SHA256SUMS" "${tfplugindocs_asset}"; \
+    unzip -q "${tmp}/${tfplugindocs_asset}" -d "${tmp}/tfplugindocs"; \
+    install -m 0755 "${tmp}/tfplugindocs/tfplugindocs" /usr/local/bin/tfplugindocs; \
+    gh_asset="gh_${GH_VERSION}_linux_${arch}.tar.gz"; \
+    download "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${gh_asset}" "${tmp}/${gh_asset}"; \
+    download "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_checksums.txt" "${tmp}/gh_checksums.txt"; \
+    verify "${tmp}/gh_checksums.txt" "${gh_asset}"; \
+    tar -xzf "${tmp}/${gh_asset}" -C "${tmp}"; \
+    install -m 0755 "${tmp}/gh_${GH_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh; \
+    uv_asset="uv-${uv_arch}-unknown-linux-gnu.tar.gz"; \
+    download "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${uv_asset}" "${tmp}/${uv_asset}"; \
+    download "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${uv_asset}.sha256" "${tmp}/${uv_asset}.sha256"; \
+    uv_digest="$(awk 'NR == 1 { print $1 }' "${tmp}/${uv_asset}.sha256")"; \
+    printf '%s  %s\n' "${uv_digest}" "${uv_asset}" > "${tmp}/uv_selected.sha256"; \
+    (cd "${tmp}" && sha256sum --check uv_selected.sha256); \
+    tar -xzf "${tmp}/${uv_asset}" -C "${tmp}"; \
+    install -m 0755 "${tmp}/uv-${uv_arch}-unknown-linux-gnu/uv" /usr/local/bin/uv; \
+    install -m 0755 "${tmp}/uv-${uv_arch}-unknown-linux-gnu/uvx" /usr/local/bin/uvx; \
+    find "${tmp}" -mindepth 1 -delete; \
+    rmdir "${tmp}"
+
+RUN set -eux; \
+    GOBIN=/usr/local/bin go install "golang.org/x/vuln/cmd/govulncheck@v${GOVULNCHECK_VERSION}"; \
+    go clean -cache -modcache
+
+WORKDIR /workspace
+
+COPY pyproject.toml uv.lock ./
+
+RUN uv sync --frozen --all-groups --no-install-project
+
+CMD ["sleep", "infinity"]

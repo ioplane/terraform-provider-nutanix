@@ -1,0 +1,75 @@
+version: "3"
+
+tasks:
+  _container:
+    internal: true
+    dir: /workspace
+    preconditions:
+      - sh: test -f /run/.containerenv
+        msg: tasks must run inside the Podman development container
+      - sh: test "$(pwd -P)" = /workspace
+        msg: tasks must run from /workspace
+
+  versions:
+    desc: Print the pinned development tool versions
+    deps: [_container]
+    dir: /workspace
+    silent: true
+    cmds:
+      - |
+        set -eu
+        semver() {
+          grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1
+        }
+        emit() {
+          name="$1"
+          shift
+          value="$("$@" 2>&1 | semver)"
+          test -n "${value}"
+          printf '%s=%s\n' "${name}" "${value}"
+        }
+        emit go go version
+        emit terraform terraform version
+        emit task task --version
+        emit beads bd version
+        python -c 'from importlib.metadata import version; print("podman-py=" + version("podman"))'
+        python -c 'from importlib.metadata import version; print("podman-compose=" + version("podman-compose"))'
+        emit uv uv --version
+        emit ruff ruff --version
+        emit ty ty --version
+        emit pytest pytest --version
+        emit golangci-lint golangci-lint version
+        emit goreleaser goreleaser --version
+        emit tfplugindocs tfplugindocs --version
+        value="$(govulncheck -version 2>&1 | sed -nE 's/.*govulncheck@v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
+        test -n "${value}"
+        printf 'govulncheck=%s\n' "${value}"
+        emit gh gh --version
+
+  python:format:
+    desc: Format Python sources and tests
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - ruff format scripts tests
+
+  python:lint:
+    desc: Lint Python sources and tests
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - ruff check scripts tests
+
+  python:typecheck:
+    desc: Type-check Python sources and tests
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - ty check
+
+  python:test:
+    desc: Run Python tests
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - pytest {{.CLI_ARGS}}
