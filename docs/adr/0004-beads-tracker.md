@@ -1,0 +1,36 @@
+# ADR 0004: Beads Tracker
+
+**Status:** Accepted
+
+**Date:** 2026-08-04
+
+## Context
+
+The delivery plan needs dependency-aware task state, an atomic ready queue,
+and synchronized history across branches and worktrees. A manually maintained
+Markdown plan or custom JSON registry cannot provide those guarantees without
+reimplementing tracker behavior.
+
+## Decision
+
+Use Beads 1.1.2 with embedded Dolt as the canonical task and dependency
+tracker. Synchronize the Dolt database through the Git origin under
+`refs/dolt/data` using the Beads Dolt workflow. Treat `.beads/issues.jsonl` and
+the generated roadmap as review and human-readable projections only, never as
+canonical task state.
+
+Keep exactly one critical-path task `in_progress`. Close a task only after its
+acceptance evidence is attached.
+
+## Consequences
+
+Task readiness, dependencies, claims, and history remain structured and
+synchronizable. Contributors and automation must install the pinned tracker,
+bootstrap its embedded database, and follow its explicit pull and push
+workflow. The extra tooling and synchronization discipline replace simpler but
+non-authoritative Markdown status editing.
+
+## References
+
+- [Approved foundation design](../superpowers/specs/2026-08-04-foundation-design.md)
+- [Beads 1.1.2 Dolt synchronization](https://github.com/gastownhall/beads/blob/v1.1.2/docs/DOLT.md)

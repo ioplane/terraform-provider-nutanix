@@ -34,7 +34,11 @@ Do not run these commands until M0 provides `./dev`. Build, test, lint, generati
 - [Naming standard](docs/standards/naming.md)
 - [Nutanix artifact standard](docs/standards/nutanix-artifacts.md)
 - [Testing standard](docs/standards/testing.md)
-- [Architecture decision records (planned; not present yet)](docs/adr/)
+- [ADR 0001: Modular Monolith](docs/adr/0001-modular-monolith.md)
+- [ADR 0002: Hand-Written Nutanix Client](docs/adr/0002-hand-written-nutanix-client.md)
+- [ADR 0003: Podman Development Boundary](docs/adr/0003-podman-development-boundary.md)
+- [ADR 0004: Beads Tracker](docs/adr/0004-beads-tracker.md)
+- [ADR 0005: Nutanix Artifact Lock](docs/adr/0005-nutanix-artifact-lock.md)
 - [Contribution guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
