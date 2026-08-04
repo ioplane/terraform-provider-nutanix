@@ -62,4 +62,3 @@ cannot be reported as passed.
 - [Terraform Plugin Framework](https://developer.hashicorp.com/terraform/plugin/framework)
 - [Terraform plugin protocol](https://developer.hashicorp.com/terraform/plugin/terraform-plugin-protocol)
 - [Approved foundation design](../superpowers/specs/2026-08-04-foundation-design.md)
-

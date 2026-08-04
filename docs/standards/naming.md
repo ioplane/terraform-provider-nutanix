@@ -53,4 +53,3 @@ transport, and compatibility code.
 - [Organizing a Go module](https://go.dev/doc/modules/layout)
 - [Terraform provider contract](../contract.md)
 - [Approved foundation design](../superpowers/specs/2026-08-04-foundation-design.md)
-

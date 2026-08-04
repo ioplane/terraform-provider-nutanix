@@ -2,7 +2,7 @@
 
 > **Development status:** the M0 foundation is in progress. No Terraform resources, data sources, or actions are implemented. This repository is not ready for provider use.
 
-This project is a greenfield Terraform provider for the Nutanix Cloud Platform. It is a handwritten modular monolith built with Terraform Plugin Framework and served over Terraform Plugin Protocol 6. It does not use a Nutanix SDK as a runtime dependency or generate implementation code from OpenAPI.
+This project targets a greenfield Terraform provider for the Nutanix Cloud Platform. The M0 foundation establishes a handwritten modular monolith built with Terraform Plugin Framework and intended to use Terraform Plugin Protocol 6. It does not use a Nutanix SDK as a runtime dependency or generate implementation code from OpenAPI.
 
 | Property | Value |
 | --- | --- |

@@ -20,6 +20,9 @@ public Go library API. Packages are small, lower-case, single-word units with
 one concrete responsibility. The dependency boundaries in the
 [provider architecture](../architecture.md) apply to every package.
 
+Use Effective Go as baseline idiom guidance alongside the current Go release,
+module-layout, code-review, and security guidance linked below.
+
 Prefer the standard library. Add a dependency only when its benefit justifies
 its maintenance and security surface. Declare an interface in the consuming
 package at the point of use. Do not create an interface next to an
@@ -74,8 +77,8 @@ an automatic mutating CI step, and its diff must pass the full gate.
 ## References
 
 - [Go 1.26 release notes](https://go.dev/doc/go1.26)
+- [Effective Go](https://go.dev/doc/effective_go)
 - [Organizing a Go module](https://go.dev/doc/modules/layout)
 - [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments)
 - [Go security best practices](https://go.dev/doc/security/best-practices)
 - [Approved foundation design](../superpowers/specs/2026-08-04-foundation-design.md)
-

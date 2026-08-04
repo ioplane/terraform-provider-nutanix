@@ -93,4 +93,3 @@ locked namespace, version, operations, and schemas it uses.
 - [Nutanix Developer Portal](https://developers.nutanix.com/)
 - [Approved foundation design](../superpowers/specs/2026-08-04-foundation-design.md)
 - [Provider architecture](../architecture.md)
-
