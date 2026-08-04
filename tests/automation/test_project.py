@@ -3,8 +3,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 from scripts.automation.process import CommandResult
-from scripts.automation.project import discover_project, project_name
+from scripts.automation.project import ProjectError, discover_project, project_name
 
 
 def test_project_name_is_stable_and_worktree_specific(tmp_path: Path) -> None:
@@ -23,17 +24,25 @@ def test_discover_project_resolves_root_and_common_directory(tmp_path: Path) -> 
     start = tmp_path / "nested"
     root = tmp_path / "checkout"
     common_dir = tmp_path / "repository.git"
+    git_dir = common_dir / "worktrees" / "feature"
     calls: list[tuple[str, ...]] = []
 
     def fake_run(arguments: tuple[str, ...], **_: object) -> CommandResult:
         calls.append(arguments)
-        output = root if "--show-toplevel" in arguments else common_dir
+        if "--show-toplevel" in arguments:
+            output = root
+        elif "--git-common-dir" in arguments:
+            output = common_dir
+        else:
+            output = git_dir
         return CommandResult(arguments=arguments, returncode=0, stdout=f"{output}\n", stderr="")
 
     project = discover_project(start, runner=fake_run)
 
     assert project.root == root.resolve()
     assert project.git_common_dir == common_dir.resolve()
+    assert project.git_dir == git_dir.resolve()
+    assert project.git_dir_relative == Path("worktrees/feature")
     assert project.name == project_name(common_dir, root)
     assert calls == [
         (
@@ -52,4 +61,26 @@ def test_discover_project_resolves_root_and_common_directory(tmp_path: Path) -> 
             "--path-format=absolute",
             "--git-common-dir",
         ),
+        (
+            "git",
+            "-C",
+            str(root.resolve()),
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-dir",
+        ),
     ]
+
+
+def test_discover_project_rejects_git_dir_outside_common_directory(tmp_path: Path) -> None:
+    root = tmp_path / "checkout"
+    common_dir = tmp_path / "repository.git"
+    outside_git_dir = tmp_path / "other.git"
+    outputs = iter((root, common_dir, outside_git_dir))
+
+    def fake_run(arguments: tuple[str, ...], **_: object) -> CommandResult:
+        output = next(outputs)
+        return CommandResult(arguments=arguments, returncode=0, stdout=f"{output}\n", stderr="")
+
+    with pytest.raises(ProjectError):
+        discover_project(root, runner=fake_run)

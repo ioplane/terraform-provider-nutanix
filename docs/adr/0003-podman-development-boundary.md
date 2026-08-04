@@ -19,15 +19,37 @@ Terraform, Task, Beads, Python, and packaging work. The toolbox supplies the
 pinned Go 1.26 toolchain.
 
 Use `podman-compose` for container lifecycle and `podman-py` for readiness,
-inspection, and command execution. Do not mount the Podman socket inside the
-development container.
+inspection, status, and noninteractive command execution. The launcher uses a
+direct argument array for every subprocess and applies bounded timeouts.
+Interactive attach is the sole exception: after `podman-py` verifies the exact
+container is healthy, `./dev shell` replaces the launcher process with
+`podman exec --interactive --tty`. This exception is necessary because the
+installed `podman-py` exec implementation ignores its `socket` option and does
+not expose the required interactive attach stream. A bounded `podman ps` is
+allowed only when the status API is unavailable. Do not mount the Podman socket
+inside the development container.
+
+Derive the Compose project name from the resolved Git common directory and
+worktree root. Mount the worktree at `/workspace` and its Git common directory
+at `/git-common`, then set `GIT_WORK_TREE`, `GIT_COMMON_DIR`, and the safely
+relative `GIT_DIR` explicitly. Reject a resolved Git directory outside the
+common directory. This preserves real Git behavior in both primary and linked
+worktrees without mounting a Podman control socket.
+
+Remove `GH_TOKEN` and `GITHUB_TOKEN` from ordinary Compose, shell, Task, and
+Beads environments. Only remote `bd dolt push` and `bd dolt pull` operations
+may receive a token, with nonempty precedence `GH_TOKEN`, `GITHUB_TOKEN`, then
+a bounded host `gh auth token` lookup. Inject the token per exec, configure Git
+authentication in the container first, and redact it from both output streams.
 
 ## Consequences
 
 Local and CI evidence uses the same isolated toolchain, and the toolbox cannot
 control unrelated host containers through a mounted socket. Contributors pay
 an initial bootstrap cost, require a working Podman environment, and incur
-container startup and execution overhead.
+container startup and execution overhead. The Git common-directory mount gives
+the toolbox repository metadata access, while the short-lived remote-token path
+adds explicit credential-handling and redaction logic.
 
 ## References
 

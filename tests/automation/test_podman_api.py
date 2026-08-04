@@ -23,6 +23,7 @@ class FakeContainer:
         state: str = "running",
         transport: FakeTransport | None = None,
     ) -> None:
+        self.name = "project-a_dev_1"
         self._health = iter(health)
         self._current_health = health[-1]
         self.state = state
@@ -279,6 +280,38 @@ def test_exact_compose_project_and_service_labels_are_used(
             ],
         }
     ]
+
+
+def test_status_reloads_sparse_container_before_reading_state(
+    podman_api: ModuleType,
+) -> None:
+    transport = FakeTransport(9.0)
+
+    class SparseContainer(FakeContainer):
+        def __init__(self) -> None:
+            super().__init__(transport=transport)
+            self.reloaded = False
+
+        @property
+        def attrs(self) -> dict[str, object]:
+            if not self.reloaded:
+                return {"State": "running"}
+            return super().attrs
+
+        def reload(self) -> None:
+            super().reload()
+            self.reloaded = True
+
+    container = SparseContainer()
+    client = FakeClient(FakeContainers((container,)), transport=transport)
+
+    with _connect(podman_api, client) as api:
+        status = api.status()
+
+    assert status.name == "project-a_dev_1"
+    assert status.state == "running"
+    assert container.reload_timeouts == [9.0]
+    assert transport.timeout == 9.0
 
 
 def test_historical_exited_container_is_excluded_from_exact_lookup(

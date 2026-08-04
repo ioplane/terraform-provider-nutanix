@@ -21,7 +21,13 @@ class Project:
 
     root: Path
     git_common_dir: Path
+    git_dir: Path
+    git_dir_relative: Path
     name: str
+
+
+class ProjectError(RuntimeError):
+    """ProjectError reports an unsafe or inconsistent Git worktree layout."""
 
 
 def project_name(git_common_dir: Path, worktree: Path) -> str:
@@ -34,7 +40,7 @@ def project_name(git_common_dir: Path, worktree: Path) -> str:
 
 
 def discover_project(start: Path | None = None, *, runner: Runner = run) -> Project:
-    """Resolve the worktree root, Git common directory, and Compose name."""
+    """Resolve worktree paths and a stable Compose project identity."""
     starting_path = (start or Path.cwd()).expanduser().resolve()
     root_arguments = (
         "git",
@@ -54,6 +60,25 @@ def discover_project(start: Path | None = None, *, runner: Runner = run) -> Proj
         "--git-common-dir",
     )
     git_common_dir = Path(runner(common_arguments).stdout.strip()).expanduser().resolve()
+    git_dir_arguments = (
+        "git",
+        "-C",
+        str(root),
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-dir",
+    )
+    git_dir = Path(runner(git_dir_arguments).stdout.strip()).expanduser().resolve()
+    try:
+        git_dir_relative = git_dir.relative_to(git_common_dir)
+    except ValueError:
+        raise ProjectError(
+            f"Git directory {git_dir} is outside common directory {git_common_dir}"
+        ) from None
     return Project(
-        root=root, git_common_dir=git_common_dir, name=project_name(git_common_dir, root)
+        root=root,
+        git_common_dir=git_common_dir,
+        git_dir=git_dir,
+        git_dir_relative=git_dir_relative,
+        name=project_name(git_common_dir, root),
     )

@@ -10,8 +10,13 @@ services:
     init: true
     working_dir: /workspace
     command: ["sleep", "infinity"]
+    environment:
+      GIT_COMMON_DIR: /git-common
+      GIT_DIR: /git-common/${NUTANIX_GIT_DIR_RELATIVE}
+      GIT_WORK_TREE: /workspace
     volumes:
       - ../..:/workspace:z
+      - ${NUTANIX_GIT_COMMON_DIR:?required}:/git-common:z
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
       - uv-cache:/opt/uv-cache

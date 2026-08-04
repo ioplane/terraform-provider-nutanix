@@ -13,16 +13,33 @@ This project targets a greenfield Terraform provider for the Nutanix Cloud Platf
 
 ## Foundation workflow
 
-The repository launcher and development container are part of M0 and are not available yet. Once that work lands, the supported host entrypoints will be limited to:
+Use the repository launcher for development. It bootstraps the exact locked
+Python environment through `uv` 0.12.1; the host does not need the repository's
+Go, Terraform, Task, Beads, or Python tools installed.
 
 ```text
 ./dev up
-./dev task all
-./dev task verify
-./dev beads ready --json
+./dev status
+./dev task versions
+./dev task python:test
+./dev beads --version
+./dev shell
+./dev down
 ```
 
-Do not run these commands until M0 provides `./dev`. Build, test, lint, generation, packaging, Terraform, Task, Beads, and required Python quality work will run inside Podman through that launcher.
+`./dev task` and `./dev beads` preserve every following argument as a direct
+container argument. Build, test, lint, generation, packaging, Terraform, Task,
+Beads, and Python quality work run inside Podman. The launcher derives a stable
+Compose project name per Git worktree, mounts that worktree at `/workspace`,
+and mounts its Git common directory at `/git-common`. Explicit `GIT_DIR`,
+`GIT_COMMON_DIR`, and `GIT_WORK_TREE` values keep Git commands such as
+`git status` functional in linked worktrees.
+
+The development container does not receive the Podman socket. Lifecycle,
+readiness, status, and noninteractive commands are bounded host operations;
+only `./dev shell` uses an interactive host `podman exec`. GitHub tokens are
+removed from ordinary container operations and are injected only for
+`./dev beads dolt push` or `./dev beads dolt pull`, with output redaction.
 
 ## Project documents
 

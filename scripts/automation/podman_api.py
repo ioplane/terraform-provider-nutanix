@@ -23,6 +23,9 @@ class ContainerProtocol(Protocol):
     """Podman container behavior used by the launcher."""
 
     @property
+    def name(self) -> str: ...
+
+    @property
     def attrs(self) -> Mapping[str, object]: ...
 
     def reload(self, **kwargs: object) -> None: ...
@@ -120,6 +123,14 @@ class ExecResult:
     stderr: bytes
 
 
+@dataclass(frozen=True, slots=True)
+class ContainerStatus:
+    """ContainerStatus is the exact container name and inspected runtime state."""
+
+    name: str
+    state: str
+
+
 @dataclass(slots=True)
 class PodmanAPI:
     """PodmanAPI performs exact Compose lookup, readiness, and exec operations."""
@@ -137,6 +148,16 @@ class PodmanAPI:
         except PODMAN_EXCEPTIONS as error:
             raise PodmanAPIError("Podman container lookup failed") from error
         return self._select_container(containers)
+
+    def status(self) -> ContainerStatus:
+        """Reload and report the exact container without sparse-object shortcuts."""
+        container = self.find_container()
+        try:
+            with self._transport_timeout(DEFAULT_API_TIMEOUT_SECONDS):
+                container.reload()
+        except PODMAN_EXCEPTIONS as error:
+            raise PodmanAPIError("Podman container inspection failed") from error
+        return ContainerStatus(container.name, _container_state(container.attrs))
 
     def wait_until_healthy(self, *, timeout: float, interval: float = 0.2) -> ContainerProtocol:
         """Wait within a deadline for the exact Compose container to become healthy."""
