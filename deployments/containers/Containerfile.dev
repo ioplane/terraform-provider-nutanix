@@ -9,6 +9,7 @@ ARG TFPLUGINDOCS_VERSION=0.25.0
 ARG GOVULNCHECK_VERSION=1.6.0
 ARG GH_VERSION=2.97.0
 ARG UV_VERSION=0.12.1
+ARG DEBIAN_SNAPSHOT=20260713T000000Z
 
 ARG OCI_VERSION=0.0.0-dev
 ARG OCI_REVISION=0000000000000000000000000000000000000000
@@ -31,6 +32,23 @@ ENV GOTOOLCHAIN=local \
     UV_PYTHON_DOWNLOADS=never \
     UV_CACHE_DIR=/opt/uv-cache \
     PATH=/opt/venv/bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+RUN set -eux; \
+    sources=/etc/apt/sources.list.d/debian.sources; \
+    debian_snapshot="http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}"; \
+    security_snapshot="http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}"; \
+    grep -Fx "# ${debian_snapshot}" "${sources}"; \
+    grep -Fx "# ${security_snapshot}" "${sources}"; \
+    grep -Fx 'URIs: http://deb.debian.org/debian' "${sources}"; \
+    grep -Fx 'URIs: http://deb.debian.org/debian-security' "${sources}"; \
+    sed -i \
+        -e '/^# http:\/\/snapshot\.debian\.org\/archive\//d' \
+        -e "s|^URIs: http://deb.debian.org/debian$|URIs: ${debian_snapshot}|" \
+        -e "s|^URIs: http://deb.debian.org/debian-security$|URIs: ${security_snapshot}|" \
+        -e '/^Signed-By:/a Check-Valid-Until: no' \
+        "${sources}"; \
+    ! grep -Fq 'deb.debian.org' "${sources}"; \
+    test "$(grep -Fc 'Check-Valid-Until: no' "${sources}")" -eq 2
 
 RUN set -eux; \
     apt-get update; \
