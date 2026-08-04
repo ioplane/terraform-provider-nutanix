@@ -14,6 +14,7 @@ from scripts.automation.podman_api import (
     ExecResult,
     PodmanAPI,
     PodmanAPIError,
+    PodmanUnavailableError,
     connect,
 )
 from scripts.automation.process import CommandError, CommandResult, run
@@ -146,7 +147,7 @@ class Launcher:
                 status = api.status()
                 _write(self.stdout, f"{status.name} {status.state}\n".encode())
                 return 0
-        except PodmanAPIError:
+        except PodmanUnavailableError:
             result = self.runner(
                 (
                     "podman",

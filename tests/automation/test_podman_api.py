@@ -249,13 +249,36 @@ def test_missing_socket_raises_typed_error(podman_api: ModuleType) -> None:
     )
 
 
+def test_socket_error_is_an_api_unavailability(podman_api: ModuleType) -> None:
+    unavailable_type = getattr(podman_api, "PodmanUnavailableError", None)
+
+    assert isinstance(unavailable_type, type)
+    assert issubclass(podman_api.PodmanSocketError, unavailable_type)
+
+
+def test_semantic_errors_are_not_api_unavailability(podman_api: ModuleType) -> None:
+    unavailable_type = getattr(podman_api, "PodmanUnavailableError", None)
+    assert isinstance(unavailable_type, type)
+
+    for name in (
+        "ContainerNotFoundError",
+        "AmbiguousContainerError",
+        "ContainerUnhealthyError",
+    ):
+        error_type = getattr(podman_api, name)
+        assert issubclass(error_type, podman_api.PodmanAPIError)
+        assert not issubclass(error_type, unavailable_type)
+
+
 def test_podman_exception_is_wrapped_with_cause(podman_api: ModuleType) -> None:
     containers = FakeContainers()
     original = APIError("service unavailable")
     containers.error = original
 
+    unavailable_type = getattr(podman_api, "PodmanUnavailableError", None)
+    assert isinstance(unavailable_type, type)
     with _connect(podman_api, FakeClient(containers)) as api:
-        with pytest.raises(podman_api.PodmanAPIError) as raised:
+        with pytest.raises(unavailable_type) as raised:
             api.find_container()
 
     assert raised.value.__cause__ is original
@@ -312,6 +335,47 @@ def test_status_reloads_sparse_container_before_reading_state(
     assert status.state == "running"
     assert container.reload_timeouts == [9.0]
     assert transport.timeout == 9.0
+
+
+def test_status_inspection_error_is_api_unavailability(podman_api: ModuleType) -> None:
+    original = APIError("inspection unavailable")
+
+    class FailingContainer(FakeContainer):
+        def reload(self) -> None:
+            raise original
+
+    unavailable_type = getattr(podman_api, "PodmanUnavailableError", None)
+    assert isinstance(unavailable_type, type)
+    container = FailingContainer()
+
+    with _connect(podman_api, FakeClient(FakeContainers((container,)))) as api:
+        with pytest.raises(unavailable_type) as raised:
+            api.status()
+
+    assert raised.value.__cause__ is original
+
+
+def test_client_connection_error_is_api_unavailability(
+    podman_api: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = APIError("connection unavailable")
+    unavailable_type = getattr(podman_api, "PodmanUnavailableError", None)
+    assert isinstance(unavailable_type, type)
+
+    def from_env(**_: object) -> object:
+        raise original
+
+    monkeypatch.setattr(podman_api.PodmanClient, "from_env", from_env)
+
+    with pytest.raises(unavailable_type) as raised:
+        with podman_api.connect(
+            "project-a",
+            "dev",
+            env={"CONTAINER_HOST": "unix:///selected.sock"},
+        ):
+            pass
+
+    assert raised.value.__cause__ is original
 
 
 def test_historical_exited_container_is_excluded_from_exact_lookup(
@@ -408,6 +472,40 @@ def test_health_wait_has_bounded_typed_timeout(podman_api: ModuleType) -> None:
     assert clock.now == pytest.approx(0.5)
 
 
+def test_health_lookup_transport_error_is_api_unavailability(
+    podman_api: ModuleType,
+) -> None:
+    original = APIError("lookup unavailable")
+    containers = FakeContainers()
+    containers.error = original
+    unavailable_type = podman_api.PodmanUnavailableError
+
+    with _connect(podman_api, FakeClient(containers)) as api:
+        with pytest.raises(unavailable_type) as raised:
+            api.wait_until_healthy(timeout=1.0)
+
+    assert raised.value.__cause__ is original
+
+
+def test_health_inspection_transport_error_is_api_unavailability(
+    podman_api: ModuleType,
+) -> None:
+    original = APIError("inspection unavailable")
+
+    class FailingContainer(FakeContainer):
+        def reload(self) -> None:
+            raise original
+
+    unavailable_type = podman_api.PodmanUnavailableError
+    container = FailingContainer()
+
+    with _connect(podman_api, FakeClient(FakeContainers((container,)))) as api:
+        with pytest.raises(unavailable_type) as raised:
+            api.wait_until_healthy(timeout=1.0)
+
+    assert raised.value.__cause__ is original
+
+
 def test_health_wait_bounds_each_api_call_and_restores_transport_timeout(
     podman_api: ModuleType,
 ) -> None:
@@ -430,7 +528,7 @@ def test_health_wait_bounds_each_api_call_and_restores_transport_timeout(
     assert transport.timeout == 9.0
 
 
-def test_transport_timeout_cannot_overrun_health_deadline(podman_api: ModuleType) -> None:
+def test_transport_timeout_is_bounded_api_unavailability(podman_api: ModuleType) -> None:
     transport = FakeTransport(0.20)
     original = APIError("timed out")
 
@@ -445,7 +543,7 @@ def test_transport_timeout_cannot_overrun_health_deadline(podman_api: ModuleType
     started = time.monotonic()
 
     with _connect(podman_api, client, clock=time.monotonic, sleep=time.sleep) as api:
-        with pytest.raises(podman_api.ContainerHealthTimeoutError) as raised:
+        with pytest.raises(podman_api.PodmanUnavailableError) as raised:
             api.wait_until_healthy(timeout=0.05, interval=0.20)
 
     assert time.monotonic() - started < 0.20
@@ -537,6 +635,23 @@ def test_exec_is_noninteractive_demuxed_and_preserves_result(
             },
         )
     ]
+
+
+def test_exec_transport_error_is_api_unavailability(podman_api: ModuleType) -> None:
+    original = APIError("exec unavailable")
+
+    class FailingContainer(FakeContainer):
+        def exec_run(self, arguments: list[str], **kwargs: object) -> object:
+            raise original
+
+    unavailable_type = podman_api.PodmanUnavailableError
+    container = FailingContainer()
+
+    with _connect(podman_api, FakeClient(FakeContainers((container,)))) as api:
+        with pytest.raises(unavailable_type) as raised:
+            api.exec(("task", "versions"))
+
+    assert raised.value.__cause__ is original
 
 
 def test_exec_rejects_a_shell_command_string(podman_api: ModuleType) -> None:

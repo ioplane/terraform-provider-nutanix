@@ -12,7 +12,13 @@ from typing import Any, cast
 
 import pytest
 import yaml
-from scripts.automation.podman_api import ExecResult, PodmanSocketError
+from scripts.automation.podman_api import (
+    AmbiguousContainerError,
+    ContainerNotFoundError,
+    ExecResult,
+    PodmanAPIError,
+    PodmanSocketError,
+)
 from scripts.automation.process import CommandError, CommandResult
 
 
@@ -44,6 +50,7 @@ class FakeAPI:
         self.container = SimpleNamespace(name="project-a_dev_1", status="running")
         self.wait_calls: list[dict[str, object]] = []
         self.find_calls = 0
+        self.status_error: PodmanAPIError | None = None
         self.exec_calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
         self.results: list[ExecResult] = []
 
@@ -57,6 +64,8 @@ class FakeAPI:
 
     def status(self) -> object:
         self.find_calls += 1
+        if self.status_error is not None:
+            raise self.status_error
         return SimpleNamespace(name=self.container.name, state=self.container.status)
 
     def exec(self, arguments: Sequence[str], **kwargs: object) -> ExecResult:
@@ -368,6 +377,55 @@ def test_status_uses_api_and_only_status_has_bounded_ps_fallback(tmp_path: Path)
             {"timeout": cli.STATUS_TIMEOUT_SECONDS},
         )
     ]
+
+
+def test_status_uses_bounded_ps_fallback_for_api_unavailability(tmp_path: Path) -> None:
+    cli = _cli()
+    unavailable_type = getattr(cli, "PodmanUnavailableError", None)
+    assert isinstance(unavailable_type, type)
+    unavailable_error = cast(type[Exception], unavailable_type)
+    api = FakeAPI()
+
+    @contextmanager
+    def unavailable(_: str, __: str) -> Iterator[FakeAPI]:
+        raise unavailable_error("Podman service unavailable")
+        yield api
+
+    runner = FakeRunner()
+    exit_code, _, _, _ = _main(
+        cli,
+        ("status",),
+        project=_project(tmp_path),
+        runner=runner,
+        api=api,
+        connector=unavailable,
+    )
+
+    assert exit_code == 0
+    assert runner.calls[0][0][:2] == ("podman", "ps")
+    assert runner.calls[0][1] == {"timeout": cli.STATUS_TIMEOUT_SECONDS}
+
+
+@pytest.mark.parametrize("error_type", [ContainerNotFoundError, AmbiguousContainerError])
+def test_status_semantic_api_error_does_not_use_cli_fallback(
+    tmp_path: Path, error_type: type[PodmanAPIError]
+) -> None:
+    cli = _cli()
+    runner = FakeRunner()
+    api = FakeAPI()
+    api.status_error = error_type("semantic status failure")
+
+    exit_code, _, stderr, _ = _main(
+        cli,
+        ("status",),
+        project=_project(tmp_path),
+        runner=runner,
+        api=api,
+    )
+
+    assert exit_code == 1
+    assert runner.calls == []
+    assert stderr == b"error: semantic status failure\n"
 
 
 def test_task_never_uses_status_cli_fallback(tmp_path: Path) -> None:

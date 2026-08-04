@@ -71,7 +71,11 @@ class PodmanAPIError(RuntimeError):
     """PodmanAPIError is the typed boundary for Podman service failures."""
 
 
-class PodmanSocketError(PodmanAPIError):
+class PodmanUnavailableError(PodmanAPIError):
+    """PodmanUnavailableError reports an unavailable Podman transport."""
+
+
+class PodmanSocketError(PodmanUnavailableError):
     """PodmanSocketError reports that no supported Podman socket exists."""
 
     def __init__(self, paths: tuple[Path, ...]) -> None:
@@ -146,7 +150,7 @@ class PodmanAPI:
         try:
             containers = self._list_containers(DEFAULT_API_TIMEOUT_SECONDS)
         except PODMAN_EXCEPTIONS as error:
-            raise PodmanAPIError("Podman container lookup failed") from error
+            raise PodmanUnavailableError("Podman container lookup failed") from error
         return self._select_container(containers)
 
     def status(self) -> ContainerStatus:
@@ -156,7 +160,7 @@ class PodmanAPI:
             with self._transport_timeout(DEFAULT_API_TIMEOUT_SECONDS):
                 container.reload()
         except PODMAN_EXCEPTIONS as error:
-            raise PodmanAPIError("Podman container inspection failed") from error
+            raise PodmanUnavailableError("Podman container inspection failed") from error
         return ContainerStatus(container.name, _container_state(container.attrs))
 
     def wait_until_healthy(self, *, timeout: float, interval: float = 0.2) -> ContainerProtocol:
@@ -172,11 +176,7 @@ class PodmanAPI:
             try:
                 containers = self._list_containers(remaining)
             except PODMAN_EXCEPTIONS as error:
-                if self.clock() >= deadline:
-                    raise ContainerHealthTimeoutError(
-                        self.project, self.service, timeout
-                    ) from error
-                raise PodmanAPIError("Podman container lookup failed") from error
+                raise PodmanUnavailableError("Podman container lookup failed") from error
             container = self._select_container(containers)
 
             remaining = self._remaining(deadline, timeout)
@@ -184,11 +184,7 @@ class PodmanAPI:
                 with self._transport_timeout(remaining):
                     container.reload()
             except PODMAN_EXCEPTIONS as error:
-                if self.clock() >= deadline:
-                    raise ContainerHealthTimeoutError(
-                        self.project, self.service, timeout
-                    ) from error
-                raise PodmanAPIError("Podman container inspection failed") from error
+                raise PodmanUnavailableError("Podman container inspection failed") from error
 
             self._remaining(deadline, timeout)
             attrs = container.attrs
@@ -238,7 +234,7 @@ class PodmanAPI:
                     demux=True,
                 )
         except PODMAN_EXCEPTIONS as error:
-            raise PodmanAPIError("Podman container exec failed") from error
+            raise PodmanUnavailableError("Podman container exec failed") from error
 
         exit_code, output = _exec_response(raw_result)
         stdout, stderr = output
@@ -365,7 +361,7 @@ def connect(
             with client_context as client:
                 yield PodmanAPI(client, project, service, clock, sleep)
         except PODMAN_EXCEPTIONS as error:
-            raise PodmanAPIError("Podman client connection failed") from error
+            raise PodmanUnavailableError("Podman client connection failed") from error
     finally:
         if previous is None:
             env.pop(CONTAINER_HOST, None)
