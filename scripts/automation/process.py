@@ -76,6 +76,45 @@ def _send_process_group_signal(process_group: int, sent_signal: signal.Signals) 
         return
 
 
+def _captured_text(value: bytes | str | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return value or ""
+
+
+def _returncode(process: subprocess.Popen[str]) -> int:
+    return process.returncode if process.returncode is not None else -signal.SIGKILL
+
+
+def _close_process_pipes(process: subprocess.Popen[str]) -> None:
+    if process.stdout is not None:
+        process.stdout.close()
+    if process.stderr is not None:
+        process.stderr.close()
+
+
+def _terminate_process_group(
+    process: subprocess.Popen[str], terminate_grace: float
+) -> tuple[str, str]:
+    _send_process_group_signal(process.pid, signal.SIGTERM)
+    try:
+        return process.communicate(timeout=terminate_grace)
+    except subprocess.TimeoutExpired:
+        _send_process_group_signal(process.pid, signal.SIGKILL)
+
+    try:
+        return process.communicate(timeout=terminate_grace)
+    except subprocess.TimeoutExpired as expired:
+        stdout = _captured_text(expired.output)
+        stderr = _captured_text(expired.stderr)
+        _close_process_pipes(process)
+        try:
+            process.wait(timeout=terminate_grace)
+        except subprocess.TimeoutExpired:
+            pass
+        return stdout, stderr
+
+
 def run(
     arguments: Sequence[str | os.PathLike[str]],
     *,
@@ -91,7 +130,7 @@ def run(
         raise ValueError("termination grace period must be positive")
 
     normalized = _normalize_arguments(arguments)
-    process = subprocess.Popen(
+    process: subprocess.Popen[str] = subprocess.Popen(
         normalized,
         cwd=cwd,
         env=dict(env) if env is not None else None,
@@ -105,17 +144,17 @@ def run(
     try:
         stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        _send_process_group_signal(process.pid, signal.SIGTERM)
-        try:
-            stdout, stderr = process.communicate(timeout=terminate_grace)
-        except subprocess.TimeoutExpired:
-            _send_process_group_signal(process.pid, signal.SIGKILL)
-            stdout, stderr = process.communicate()
-
-        result = CommandResult(normalized, process.returncode, stdout, stderr)
+        stdout, stderr = _terminate_process_group(process, terminate_grace)
+        result = CommandResult(normalized, _returncode(process), stdout, stderr)
         raise CommandTimeoutError(result, timeout) from None
+    except BaseException as interrupted:
+        try:
+            _terminate_process_group(process, terminate_grace)
+        except Exception as cleanup_error:
+            interrupted.add_note(f"process-group cleanup failed: {cleanup_error}")
+        raise
 
-    result = CommandResult(normalized, process.returncode, stdout, stderr)
+    result = CommandResult(normalized, _returncode(process), stdout, stderr)
     if result.returncode != 0:
         raise CommandError(result)
     return result

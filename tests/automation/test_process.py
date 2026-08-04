@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import signal
 import subprocess
 import sys
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -83,3 +85,69 @@ def test_nonzero_exit_preserves_stdout_and_stderr(tmp_path: Path) -> None:
     assert raised.value.stdout == "kept stdout\n"
     assert raised.value.stderr == "kept stderr\n"
     assert raised.value.arguments == (sys.executable, "-c", program)
+
+
+def test_keyboard_interrupt_terminates_real_child_process_group(tmp_path: Path) -> None:
+    child_pid_path = tmp_path / "child.pid"
+    child_program = (
+        "import os, pathlib, time; "
+        f"pathlib.Path({str(child_pid_path)!r}).write_text(str(os.getpid())); "
+        "time.sleep(30)"
+    )
+    controller_program = (
+        "import sys; "
+        "from scripts.automation.process import run; "
+        f"run((sys.executable, '-c', {child_program!r}), timeout=30, terminate_grace=0.1)"
+    )
+    controller = subprocess.Popen((sys.executable, "-c", controller_program), cwd="/workspace")
+
+    deadline = time.monotonic() + 2.0
+    while not child_pid_path.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert child_pid_path.exists()
+    child_pid = int(child_pid_path.read_text())
+
+    try:
+        controller.send_signal(signal.SIGINT)
+        assert controller.wait(timeout=2.0) != 0
+
+        deadline = time.monotonic() + 1.0
+        while _process_is_running(child_pid) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert not _process_is_running(child_pid)
+    finally:
+        if controller.poll() is None:
+            controller.kill()
+            controller.wait(timeout=1.0)
+        if _process_is_running(child_pid):
+            os.killpg(child_pid, signal.SIGKILL)
+
+
+def test_sigkill_drain_is_bounded_when_escaped_descendant_holds_pipes() -> None:
+    escaped_program = "import time; time.sleep(1.2)"
+    parent_program = (
+        "import subprocess, sys, time; "
+        f"subprocess.Popen((sys.executable, '-c', {escaped_program!r}), start_new_session=True); "
+        "print('ready', flush=True); "
+        "time.sleep(30)"
+    )
+
+    started = time.monotonic()
+    with pytest.raises(CommandTimeoutError):
+        run(
+            (sys.executable, "-c", parent_program),
+            timeout=0.05,
+            terminate_grace=0.05,
+        )
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.5
+
+
+def _process_is_running(process_id: int) -> bool:
+    status_path = Path(f"/proc/{process_id}/stat")
+    try:
+        state = status_path.read_text().split()[2]
+    except FileNotFoundError:
+        return False
+    return state != "Z"
