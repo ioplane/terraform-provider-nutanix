@@ -15,6 +15,7 @@ from podman.errors import APIError, PodmanError
 
 CONTAINER_HOST = "CONTAINER_HOST"
 ROOTFUL_SOCKET = Path("/run/podman/podman.sock")
+DEFAULT_API_TIMEOUT_SECONDS = 30
 PODMAN_EXCEPTIONS = (APIError, PodmanError)
 
 
@@ -35,10 +36,17 @@ class ContainersProtocol(Protocol):
     def list(self, **kwargs: object) -> Sequence[ContainerProtocol]: ...
 
 
+class APIClientProtocol(Protocol):
+    """Podman transport behavior used to bound individual API requests."""
+
+    timeout: float | None
+
+
 class ClientProtocol(Protocol):
     """Context-managed Podman client behavior used by the launcher."""
 
     containers: ContainersProtocol
+    api: APIClientProtocol
 
     def __enter__(self) -> ClientProtocol: ...
 
@@ -85,6 +93,14 @@ class ContainerUnhealthyError(PodmanAPIError):
         super().__init__(f"Compose container {project}/{service} is {health}")
 
 
+class ContainerNotRunningError(PodmanAPIError):
+    """ContainerNotRunningError reports a container that stopped during readiness."""
+
+    def __init__(self, project: str, service: str, state: str) -> None:
+        self.state = state
+        super().__init__(f"Compose container {project}/{service} is {state}, not running")
+
+
 class ContainerHealthTimeoutError(PodmanAPIError):
     """ContainerHealthTimeoutError reports a bounded health-wait timeout."""
 
@@ -116,26 +132,11 @@ class PodmanAPI:
 
     def find_container(self) -> ContainerProtocol:
         """Return the one container matching exact Compose project and service labels."""
-        filters = {
-            "label": [
-                f"io.podman.compose.project={self.project}",
-                f"io.podman.compose.service={self.service}",
-            ]
-        }
         try:
-            containers = self.client.containers.list(all=True, sparse=True, filters=filters)
+            containers = self._list_containers(DEFAULT_API_TIMEOUT_SECONDS)
         except PODMAN_EXCEPTIONS as error:
             raise PodmanAPIError("Podman container lookup failed") from error
-
-        if not containers:
-            raise ContainerNotFoundError(
-                f"Compose container {self.project}/{self.service} was not found"
-            )
-        if len(containers) != 1:
-            raise AmbiguousContainerError(
-                f"multiple Compose containers match {self.project}/{self.service}"
-            )
-        return containers[0]
+        return self._select_container(containers)
 
     def wait_until_healthy(self, *, timeout: float, interval: float = 0.2) -> ContainerProtocol:
         """Wait within a deadline for the exact Compose container to become healthy."""
@@ -146,21 +147,40 @@ class PodmanAPI:
 
         deadline = self.clock() + timeout
         while True:
-            container = self.find_container()
+            remaining = self._remaining(deadline, timeout)
             try:
-                container.reload()
+                containers = self._list_containers(remaining)
             except PODMAN_EXCEPTIONS as error:
+                if self.clock() >= deadline:
+                    raise ContainerHealthTimeoutError(
+                        self.project, self.service, timeout
+                    ) from error
+                raise PodmanAPIError("Podman container lookup failed") from error
+            container = self._select_container(containers)
+
+            remaining = self._remaining(deadline, timeout)
+            try:
+                with self._transport_timeout(remaining):
+                    container.reload()
+            except PODMAN_EXCEPTIONS as error:
+                if self.clock() >= deadline:
+                    raise ContainerHealthTimeoutError(
+                        self.project, self.service, timeout
+                    ) from error
                 raise PodmanAPIError("Podman container inspection failed") from error
 
-            health = _health_status(container.attrs)
+            self._remaining(deadline, timeout)
+            attrs = container.attrs
+            state = _container_state(attrs)
+            if state != "running":
+                raise ContainerNotRunningError(self.project, self.service, state)
+            health = _health_status(attrs)
             if health == "healthy":
                 return container
             if health == "unhealthy":
                 raise ContainerUnhealthyError(self.project, self.service, health)
 
-            remaining = deadline - self.clock()
-            if remaining <= 0:
-                raise ContainerHealthTimeoutError(self.project, self.service, timeout)
+            remaining = self._remaining(deadline, timeout)
             self.sleep(min(interval, remaining))
 
     def exec(
@@ -181,26 +201,70 @@ class PodmanAPI:
 
         container = self.find_container()
         try:
-            raw_result = container.exec_run(
-                normalized,
-                stdout=True,
-                stderr=True,
-                stdin=False,
-                tty=False,
-                privileged=False,
-                detach=False,
-                stream=False,
-                socket=False,
-                environment=dict(environment or {}),
-                workdir=workdir,
-                demux=True,
-            )
+            with self._transport_timeout(DEFAULT_API_TIMEOUT_SECONDS):
+                raw_result = container.exec_run(
+                    normalized,
+                    stdout=True,
+                    stderr=True,
+                    stdin=False,
+                    tty=False,
+                    privileged=False,
+                    detach=False,
+                    stream=False,
+                    socket=False,
+                    environment=dict(environment or {}),
+                    workdir=workdir,
+                    demux=True,
+                )
         except PODMAN_EXCEPTIONS as error:
             raise PodmanAPIError("Podman container exec failed") from error
 
         exit_code, output = _exec_response(raw_result)
         stdout, stderr = output
         return ExecResult(exit_code, _output_bytes(stdout), _output_bytes(stderr))
+
+    def _list_containers(self, timeout: float) -> Sequence[ContainerProtocol]:
+        filters = [
+            f"label=io.podman.compose.project={self.project}",
+            f"label=io.podman.compose.service={self.service}",
+        ]
+        with self._transport_timeout(timeout):
+            return self.client.containers.list(all=False, sparse=True, filters=filters)
+
+    def _select_container(self, containers: Sequence[ContainerProtocol]) -> ContainerProtocol:
+        if not containers:
+            raise ContainerNotFoundError(
+                f"Compose container {self.project}/{self.service} was not found"
+            )
+        if len(containers) != 1:
+            raise AmbiguousContainerError(
+                f"multiple Compose containers match {self.project}/{self.service}"
+            )
+        return containers[0]
+
+    def _remaining(self, deadline: float, timeout: float) -> float:
+        remaining = deadline - self.clock()
+        if remaining <= 0:
+            raise ContainerHealthTimeoutError(self.project, self.service, timeout)
+        return remaining
+
+    @contextmanager
+    def _transport_timeout(self, timeout: float) -> Iterator[None]:
+        previous = self.client.api.timeout
+        bounded = timeout if previous is None or previous <= 0 else min(previous, timeout)
+        self.client.api.timeout = bounded
+        try:
+            yield
+        finally:
+            self.client.api.timeout = previous
+
+
+def _container_state(attrs: Mapping[str, object]) -> str:
+    state = attrs.get("State")
+    if not isinstance(state, Mapping):
+        return "unknown"
+    status = state.get("Status")
+    return status if isinstance(status, str) else "unknown"
 
 
 def _health_status(attrs: Mapping[str, object]) -> str:
@@ -255,7 +319,7 @@ def connect(
     project: str,
     service: str,
     *,
-    client_factory: ClientFactory = cast(ClientFactory, PodmanClient.from_env),
+    client_factory: ClientFactory | None = None,
     exists: PathExists = Path.exists,
     env: MutableMapping[str, str] = os.environ,
     uid_factory: Callable[[], int] = os.getuid,
@@ -268,7 +332,16 @@ def connect(
     env[CONTAINER_HOST] = host
     try:
         try:
-            with client_factory() as client:
+            if client_factory is None:
+                client_context = cast(
+                    ClientProtocol,
+                    PodmanClient.from_env(
+                        environment=dict(env), timeout=DEFAULT_API_TIMEOUT_SECONDS
+                    ),
+                )
+            else:
+                client_context = client_factory()
+            with client_context as client:
                 yield PodmanAPI(client, project, service, clock, sleep)
         except PODMAN_EXCEPTIONS as error:
             raise PodmanAPIError("Podman client connection failed") from error
