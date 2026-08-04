@@ -1,7 +1,6 @@
 # Terraform Provider Nutanix Foundation Design
 
-**Status:** approved in conversation on 2026-08-04; written specification
-awaiting repository review
+**Status:** approved in conversation on 2026-08-04; repository re-review passed
 
 ## 1. Purpose
 
@@ -37,24 +36,29 @@ The provider is one binary implemented as a modular monolith:
 ```text
 cmd/terraform-provider-nutanix
 internal/provider
-internal/core
-internal/api/<control-plane-or-namespace>
 internal/service/<domain>/<terraform-type>
+internal/nutanix/<api-namespace>
+internal/transport
+internal/auth
+internal/task
+internal/capability
 internal/testserver
 ```
 
 Dependency direction is:
 
 ```text
-cmd -> provider -> service -> api -> core
+cmd -> provider -> service -> nutanix/<namespace> -> transport
 ```
 
 Rules:
 
 - Terraform schemas and lifecycle logic live in `internal/service`.
-- API packages do not import Terraform Plugin Framework.
-- Shared transport, authentication, retry, task polling, ETag handling,
-  pagination, diagnostics, and capability discovery live in `internal/core`.
+- Nutanix namespace and transport packages do not import Terraform Plugin
+  Framework.
+- Shared HTTP behavior lives in focused packages such as `transport`, `auth`,
+  `task`, and `capability`; catch-all `api`, `core`, `common`, `types`, and
+  `util` Go packages are forbidden.
 - Production transport and DTOs are hand-written.
 - Nutanix SDKs are not runtime dependencies.
 - OpenAPI snapshots are pinned evidence and test input, not generators of
@@ -65,6 +69,80 @@ Rules:
 The foundation sprint registers no resource, data source, action, function, or
 ephemeral resource. It proves only provider startup, schema, configuration
 validation, protocol 6 negotiation, packaging, and delivery controls.
+
+### 3.1 Official Nutanix artifact contract
+
+The Nutanix Developer Portal is the primary machine-readable API source. The
+foundation consumes its public registry and artifact endpoints:
+
+```text
+GET https://developers.nutanix.com/api/v1/namespaces/
+GET https://developers.nutanix.com/api/v1/namespaces/<namespace>/versions/
+GET https://developers.nutanix.com/api/v1/namespaces/<namespace>/versions/<version>/yaml
+GET https://developers.nutanix.com/api/v1/namespaces/<namespace>/versions/<version>/postman-collection
+GET https://developers.nutanix.com/api/v1/namespaces/<namespace>/versions/<version>/locale/en_US/error
+```
+
+The 2026-08-04 registry exposes 19 namespaces. There is no single global API
+version: each namespace advances independently. Selection prefers the newest
+GA version matching `v<major>.<minor>`. If a namespace has no GA release, its
+newest preview may be selected only with an explicit `preview` stability flag.
+
+M0 locks exactly one selected version for every namespace returned by the
+registry, not a subset. The initial selection is:
+
+| Namespace | Version | Stability |
+| --- | --- | --- |
+| `aiops` | `v4.0` | GA |
+| `clustermgmt` | `v4.2` | GA |
+| `datapolicies` | `v4.2` | GA |
+| `dataprotection` | `v4.3` | GA |
+| `files` | `v4.0` | GA |
+| `iam` | `v4.0` | GA |
+| `licensing` | `v4.3` | GA |
+| `lifecycle` | `v4.2` | GA |
+| `microseg` | `v4.2` | GA |
+| `monitoring` | `v4.2` | GA |
+| `multidomain` | `v4.3` | GA |
+| `networking` | `v4.3` | GA |
+| `objects` | `v4.0` | GA |
+| `opsmgmt` | `v4.0` | GA |
+| `prism` | `v4.3` | GA |
+| `security` | `v4.1` | GA |
+| `storage` | `v4.0.a3` | preview; no GA published |
+| `vmm` | `v4.2` | GA |
+| `volumes` | `v4.2` | GA |
+
+`specs/nutanix/manifest.json` is the repository lock. For every selected
+namespace it records the version, stability, OpenAPI URL, Postman URL when
+published, English error-reference URL when published, and each artifact's
+byte size and SHA-256 digest. The downloaded vendor artifacts live under the
+repository-ignored `.cache/nutanix/artifacts/` tree. They are inputs to design,
+contract tests, request fixtures, and drift reports; they are never fetched by
+the provider at runtime. Vendor artifacts are not committed until their
+redistribution terms have been reviewed separately.
+
+Artifact precedence is:
+
+1. selected GA OpenAPI document;
+2. selected version's error reference;
+3. selected version's Postman collection;
+4. official SDK documentation and examples as comparison evidence only;
+5. a live PE or PC observation only for an explicitly recorded documentation
+   gap.
+
+OpenAPI or Postman disagreements are recorded as contract risks and are not
+silently resolved. SDKs are neither runtime dependencies nor code-generation
+inputs. Terraform schemas, state models, lifecycle logic, transport, and DTOs
+remain hand-written. Every product implementation task names the exact locked
+namespace, version, operations, and schemas it uses.
+
+Artifact updates are reviewable maintenance changes: `task artifacts:update`
+refreshes the cache and proposed lock, while `task artifacts:verify` downloads
+with GET, validates content type and OpenAPI/Postman shape, and checks every
+locked OpenAPI, Postman, and error-reference digest. It also proves the locked
+namespace set equals the live registry set and that GA-first selection is
+correct. The update command never changes application code.
 
 ## 4. Terraform baseline
 
@@ -83,6 +161,58 @@ The provider implements current Framework `Metadata`, `Schema`, `Configure`,
 
 Dependency pins are exact. `go.sum` is committed. Upgrades are isolated
 `build(deps)` pull requests with the full gate.
+
+### 4.1 Go 1.26 engineering standard
+
+The module declares `go 1.26.0`; the container supplies the exact patched
+toolchain Go 1.26.5 and sets `GOTOOLCHAIN=local` so validation cannot download
+or switch toolchains. Normal release builds use `CGO_ENABLED=0`. Race tests run
+in a separate target with cgo and the container compiler enabled.
+
+Repository rules follow the Go 1.26 release notes, Effective Go, Go Code
+Review Comments, the official module-layout guide, and Go security guidance:
+
+- production Go code stays under `cmd` and `internal`; no public library API is
+  promised;
+- packages are small, lower-case, single words with a concrete purpose;
+- interfaces are declared by consumers at the point of use, not pre-created
+  beside implementations for mocking;
+- `context.Context` is the first argument for request-bound work, is propagated
+  to every HTTP call, and is never stored in a struct;
+- errors are handled once, wrapped with operation context and `%w`, and never
+  used as unstructured control flow; panic is not normal error handling;
+- goroutine ownership and termination are explicit; unbounded background work
+  is forbidden;
+- HTTP clients have explicit timeouts, close response bodies, redact secrets,
+  and preserve cancellation;
+- dependencies remain minimal and standard-library facilities are preferred.
+
+Go naming is part of the contract:
+
+- initialisms use canonical case: `API`, `HTTP`, `ID`, `JSON`, `TLS`, `URL`,
+  `UUID`, and `ETag`, never `Api`, `Http`, `Id`, or `Url`;
+- receivers use one consistent one- or two-letter abbreviation per type and
+  never `this`, `self`, or `me`;
+- exported declarations have complete doc comments beginning with the name;
+- error strings start lower-case and have no terminal punctuation;
+- sentinel errors use `ErrName` only when callers need identity; structured
+  failures use `NameError`;
+- Go source files use descriptive lower snake case, with `_test.go` for tests
+  and `_acc_test.go` only for live acceptance tests.
+
+Terraform names use `nutanix_<domain>_<noun>` in lower snake case. A public
+type name does not contain an API version merely because its current transport
+does; version suffixes exist only when they are required compatibility names.
+Provider environment variables use the `NUTANIX_` prefix. Nutanix API version
+and namespace names stay inside artifact, transport, and compatibility code.
+
+The normal Go gate is formatting, `go vet ./...`, unit tests, race tests,
+linting, and `govulncheck ./...`. Parsers, pagination, filter construction,
+state upgrade, and remote error decoding gain native fuzz targets as they are
+introduced; bounded fuzz smoke runs in CI and longer fuzzing runs on schedule.
+Go 1.26 `go fix` is an explicit reviewed modernization tool, never an
+automatic mutating CI step. Experimental `GOEXPERIMENT` features are excluded
+from the supported build.
 
 ## 5. Delivery methodology
 
@@ -302,9 +432,10 @@ SECURITY.md
 VERSION
 Taskfile.yml
 dev
+.gitignore
 go.mod
 go.sum
-main.go
+cmd/terraform-provider-nutanix/main.go
 internal/provider/provider.go
 internal/provider/provider_test.go
 deployments/containers/Containerfile.dev
@@ -319,6 +450,7 @@ uv.lock
 .github/workflows/ci.yml
 docs/adr/
 docs/standards/
+specs/nutanix/manifest.json
 docs/superpowers/specs/
 docs/superpowers/plans/
 .beads/config.yaml
@@ -339,6 +471,7 @@ M0 gates:
 | Build | provider binary builds in the dev container |
 | Protocol | Terraform loads the provider through protocol 6 |
 | Unit | provider metadata/schema/config tests pass with race detection |
+| Artifacts | all locked Developer Portal artifacts validate and match SHA-256 |
 | Python | ruff, ty, and pytest pass inside the dev container |
 | OCI | Containerfile lint, labels, base digest, and Compose validation pass |
 | Pins | all container digests and GitHub Action SHAs resolve |
