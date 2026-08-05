@@ -43,6 +43,8 @@ type RequestOptions struct {
 	RetryClass        RetryClass
 	RequestIDRequired bool
 	Replayable        bool
+	IfMatchRequired   bool
+	IfMatchETag       string
 }
 
 // Format prevents operation inputs from entering formatted diagnostics or logs.
@@ -65,6 +67,7 @@ type Request struct {
 	retryClass        RetryClass
 	requestIDRequired bool
 	replayable        bool
+	ifMatch           string
 	valid             bool
 }
 
@@ -104,6 +107,10 @@ func NewRequest(options RequestOptions) (Request, error) {
 		(options.RequestIDRequired && options.RetryClass != RetryIdempotentMutation) {
 		return Request{}, ErrInvalidRequest
 	}
+	ifMatch, ok := lockIfMatch(options.IfMatchRequired, options.IfMatchETag)
+	if !ok {
+		return Request{}, ErrInvalidRequest
+	}
 	expectedStatuses := make(map[int]struct{}, len(options.ExpectedStatuses))
 	for _, status := range options.ExpectedStatuses {
 		if status < http.StatusOK || status >= http.StatusMultipleChoices {
@@ -132,6 +139,7 @@ func NewRequest(options RequestOptions) (Request, error) {
 		retryClass:        options.RetryClass,
 		requestIDRequired: options.RequestIDRequired,
 		replayable:        options.Replayable,
+		ifMatch:           ifMatch,
 		valid:             true,
 	}, nil
 }
@@ -227,7 +235,7 @@ func newResponse(statusCode int, headers http.Header, body []byte, correlationID
 		statusCode:    statusCode,
 		headers:       headers.Clone(),
 		body:          slices.Clone(body),
-		etag:          uniqueHeaderValueEqualFold(headers, "ETag"),
+		etag:          responseETag(headers),
 		correlationID: validCorrelationIDOrEmpty(correlationID),
 	}
 }

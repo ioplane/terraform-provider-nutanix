@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m1.6` — Pagination and ETags
+`ntnx-m1.7` — Prism v4.3 task reader and neutral waiter

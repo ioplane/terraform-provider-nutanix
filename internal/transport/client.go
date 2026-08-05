@@ -52,6 +52,7 @@ type requestPlan struct {
 	headers        http.Header
 	jsonBody       []byte
 	requestID      string
+	ifMatch        string
 }
 
 type attemptRoundTripper struct {
@@ -191,6 +192,7 @@ func (c *Client) Execute(ctx context.Context, request Request) (response Respons
 		headers:        request.headers.Clone(),
 		jsonBody:       slices.Clone(request.jsonBody),
 		requestID:      requestID,
+		ifMatch:        request.ifMatch,
 	}
 
 	budget := retryBudget{}
@@ -501,7 +503,7 @@ func (c *Client) executeAttempt(ctx context.Context, plan requestPlan) (*http.Re
 		body = bytes.NewReader(nil)
 	}
 	request, err := http.NewRequestWithContext(
-		contextWithRequestID(ctx, plan.requestID),
+		contextWithIfMatch(contextWithRequestID(ctx, plan.requestID), plan.ifMatch),
 		plan.method,
 		requestURL.String(),
 		body,
@@ -545,6 +547,10 @@ func (t *attemptRoundTripper) RoundTrip(request *http.Request) (*http.Response, 
 		(authorizationCount != 0 || apiKeyCount != 1) {
 		return nil, ErrInvalidAuthorizationState
 	}
+	deleteHeaderEqualFold(attempt.Header, ifMatchHeader)
+	if ifMatch := ifMatchFromContext(attempt.Context()); ifMatch != "" {
+		attempt.Header.Set(ifMatchHeader, ifMatch)
+	}
 	deleteHeaderEqualFold(attempt.Header, requestIDHeader)
 	if requestID := requestIDFromContext(attempt.Context()); requestID != "" {
 		attempt.Header.Set(requestIDHeader, requestID)
@@ -586,7 +592,8 @@ func reservedAttemptHeader(name string) bool {
 		strings.EqualFold(name, "Connection") ||
 		strings.EqualFold(name, "Content-Length") ||
 		strings.EqualFold(name, "Transfer-Encoding") ||
-		strings.EqualFold(name, "NTNX-Request-Id")
+		strings.EqualFold(name, "NTNX-Request-Id") ||
+		strings.EqualFold(name, ifMatchHeader)
 }
 
 func headerValueCountEqualFold(header http.Header, name string) int {
