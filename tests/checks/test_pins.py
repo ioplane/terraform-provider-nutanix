@@ -53,6 +53,10 @@ def valid_pin_repository(root: Path) -> None:
         "      dockerfile: deployments/containers/Containerfile.dev\n"
         "    volumes:\n"
         "      - ../..:/workspace:z\n"
+        "volumes:\n"
+        "  go-mod-cache: {}\n"
+        "  go-build-cache: {}\n"
+        "  uv-cache: {}\n"
     )
 
     manifest = root / pins.MANIFEST_FILE
@@ -187,9 +191,36 @@ def test_accepts_required_environment_expansion_in_volume_source(tmp_path: Path)
         "  dev:\n"
         "    volumes:\n"
         "      - ${NUTANIX_GIT_COMMON_DIR:?required}:/git-metadata/.git:z\n"
+        "volumes:\n"
+        "  go-mod-cache: {}\n"
+        "  go-build-cache: {}\n"
+        "  uv-cache: {}\n"
     )
 
     assert pins._compose_diagnostics(tmp_path) == []
+
+
+def test_rejects_named_volume_bind_override(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    compose = tmp_path / pins.COMPOSE_FILE
+    compose.write_text(
+        "services:\n"
+        "  dev:\n"
+        "    volumes:\n"
+        "      - uv-cache:/opt/uv-cache\n"
+        "volumes:\n"
+        "  go-mod-cache: {}\n"
+        "  go-build-cache: {}\n"
+        "  uv-cache:\n"
+        "    driver_opts:\n"
+        "      type: none\n"
+        "      o: bind\n"
+        "      device: /run/user/1000/podman\n"
+    )
+
+    assert "Compose named volume must be internal and empty: uv-cache" in pins._compose_diagnostics(
+        tmp_path
+    )
 
 
 def test_rejects_privileged_host_namespaces_and_socket_directory_mount(tmp_path: Path) -> None:

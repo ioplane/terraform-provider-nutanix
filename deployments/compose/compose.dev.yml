@@ -37,6 +37,6 @@ services:
       start_period: 5s
 
 volumes:
-  go-mod-cache:
-  go-build-cache:
-  uv-cache:
+  go-mod-cache: {}
+  go-build-cache: {}
+  uv-cache: {}

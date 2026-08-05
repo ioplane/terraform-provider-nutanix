@@ -211,13 +211,14 @@ _HOST_DEVELOPMENT_TOOL = re.compile(
     r"golangci-lint|govulncheck|goreleaser|tfplugindocs)(?=\s|$)"
 )
 _RISKY_COMPOSE_KEYS = frozenset({"cap_add", "devices", "security_opt", "sysctls", "volumes_from"})
+_EXPECTED_COMPOSE_TOP_LEVEL_KEYS = frozenset({"services", "volumes"})
+_EXPECTED_COMPOSE_SERVICES = frozenset({"dev"})
+_EXPECTED_COMPOSE_NAMED_VOLUMES = frozenset({"go-mod-cache", "go-build-cache", "uv-cache"})
 _ALLOWED_COMPOSE_VOLUME_SOURCES = frozenset(
     {
         "../..",
         "${NUTANIX_GIT_COMMON_DIR:?required}",
-        "go-mod-cache",
-        "go-build-cache",
-        "uv-cache",
+        *_EXPECTED_COMPOSE_NAMED_VOLUMES,
     }
 )
 
@@ -330,10 +331,23 @@ def _compose_diagnostics(root: Path) -> list[str]:
     diagnostics: list[str] = []
     if "version" in document:
         diagnostics.append("Compose top-level version is forbidden")
+    if set(document) != _EXPECTED_COMPOSE_TOP_LEVEL_KEYS:
+        diagnostics.append("Compose top-level key set differs")
     services = document.get("services", {})
     if not isinstance(services, dict):
         diagnostics.append("Compose services must be an object")
         return diagnostics
+    if set(services) != _EXPECTED_COMPOSE_SERVICES:
+        diagnostics.append("Compose service set differs")
+    named_volumes = document.get("volumes")
+    if not isinstance(named_volumes, dict):
+        diagnostics.append("Compose named volumes must be an object")
+    else:
+        if set(named_volumes) != _EXPECTED_COMPOSE_NAMED_VOLUMES:
+            diagnostics.append("Compose named volume set differs")
+        for name, definition in named_volumes.items():
+            if definition != {}:
+                diagnostics.append(f"Compose named volume must be internal and empty: {name}")
     for service in services.values():
         if not isinstance(service, dict):
             continue
