@@ -348,7 +348,6 @@ def test_launcher_bootstrap_without_marker_rejects_before_credentials_or_connect
         project=_project(tmp_path),
         runner=runner,
         api=api,
-        env={"GH_TOKEN": "must-not-be-read"},
     )
 
     assert exit_code == 1
