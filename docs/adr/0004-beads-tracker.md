@@ -29,6 +29,12 @@ subtrees beneath `.beads/`, while tracking `.beads/config.yaml` and
 `.beads/issues.jsonl`. Do not automatically discover, migrate, or delete a
 database from a previous fallback location.
 
+Fail closed until `.beads/config.yaml` is a regular file in the current
+worktree. The launcher must not invoke Beads discovery, resolve credentials, or
+enter the Podman connector for a rejected command. Permit only a command whose
+first Beads argument is exactly `init`; this exception is what creates the
+anchored database. Options placed before `init` do not bypass the guard.
+
 Keep exactly one critical-path task `in_progress`. Close a task only after its
 acceptance evidence is attached.
 

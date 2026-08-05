@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import stat
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
@@ -23,6 +24,10 @@ from scripts.automation.project import Project, ProjectError, discover_project
 SERVICE = "dev"
 COMPOSE_FILE = Path("deployments/compose/compose.dev.yml")
 BEADS_DIR = "/workspace/.beads"
+BEADS_CONFIG = Path(".beads/config.yaml")
+BEADS_NOT_INITIALIZED = (
+    "Beads is not initialized in this worktree; run './dev beads init --skip-agents' first"
+)
 COMPOSE_UP_TIMEOUT_SECONDS = 600.0
 COMPOSE_DOWN_TIMEOUT_SECONDS = 120.0
 HEALTH_TIMEOUT_SECONDS = 180.0
@@ -216,6 +221,8 @@ class Launcher:
     def beads(self, arguments: Sequence[str]) -> int:
         """Run bd, injecting a short-lived token only for remote Dolt operations."""
         normalized = self._required_arguments("beads", arguments)
+        if normalized[0] != "init":
+            self._require_local_beads()
         if tuple(normalized[:2]) not in {("dolt", "push"), ("dolt", "pull")}:
             return self._exec(
                 ("bd", *normalized),
@@ -244,6 +251,15 @@ class Launcher:
             )
         _emit_exec(result, self.stdout, self.stderr, secrets=secrets)
         return result.exit_code
+
+    def _require_local_beads(self) -> None:
+        marker = self.project.root / BEADS_CONFIG
+        try:
+            is_regular = stat.S_ISREG(marker.lstat().st_mode)
+        except OSError:
+            is_regular = False
+        if not is_regular:
+            raise LauncherError(BEADS_NOT_INITIALIZED)
 
     def _exec(
         self,

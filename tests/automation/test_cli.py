@@ -3,7 +3,9 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import io
+import os
 import stat
+import subprocess
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -94,6 +96,14 @@ def _project(tmp_path: Path) -> SimpleNamespace:
         git_dir_relative=Path("worktrees/feature"),
         name="project-a",
     )
+
+
+def _write_beads_marker(project: object) -> Path:
+    root = cast(Path, getattr(project, "root"))
+    marker = root / ".beads" / "config.yaml"
+    marker.parent.mkdir()
+    marker.write_text("backend: dolt\n")
+    return marker
 
 
 def _connector(api: FakeAPI, calls: list[tuple[str, str]]) -> Any:
@@ -241,11 +251,14 @@ def test_noninteractive_commands_wait_and_forward_exact_arguments_without_token(
     cli = _cli()
     runner = FakeRunner()
     api = FakeAPI()
+    project = _project(tmp_path)
+    if command == "beads":
+        _write_beads_marker(project)
 
     exit_code, stdout, stderr, _ = _main(
         cli,
         (command, *arguments),
-        project=_project(tmp_path),
+        project=project,
         runner=runner,
         api=api,
         env={"GH_TOKEN": "host-secret"},
@@ -262,6 +275,136 @@ def test_noninteractive_commands_wait_and_forward_exact_arguments_without_token(
     assert exit_code == 0
     assert stdout == b"exec stdout\n"
     assert stderr == b"exec stderr\n"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ("where",),
+        ("--quiet", "init", "--skip-agents"),
+    ],
+)
+def test_beads_without_marker_rejects_ordinary_command_before_external_boundaries(
+    tmp_path: Path, arguments: tuple[str, ...]
+) -> None:
+    cli = _cli()
+    runner = FakeRunner()
+    api = FakeAPI()
+
+    exit_code, stdout, stderr, connector_calls = _main(
+        cli,
+        ("beads", *arguments),
+        project=_project(tmp_path),
+        runner=runner,
+        api=api,
+    )
+
+    assert exit_code == 1
+    assert stdout == b""
+    assert stderr == (
+        b"error: Beads is not initialized in this worktree; "
+        b"run './dev beads init --skip-agents' first\n"
+    )
+    assert connector_calls == []
+    assert api.wait_calls == []
+    assert api.exec_calls == []
+    assert runner.calls == []
+
+
+def test_remote_beads_without_marker_rejects_before_credentials_or_connector(
+    tmp_path: Path,
+) -> None:
+    cli = _cli()
+    runner = FakeRunner()
+    api = FakeAPI()
+
+    exit_code, stdout, stderr, connector_calls = _main(
+        cli,
+        ("beads", "dolt", "pull"),
+        project=_project(tmp_path),
+        runner=runner,
+        api=api,
+    )
+
+    assert exit_code == 1
+    assert stdout == b""
+    assert b"Beads is not initialized in this worktree" in stderr
+    assert connector_calls == []
+    assert api.wait_calls == []
+    assert api.exec_calls == []
+    assert runner.calls == []
+
+
+def test_beads_init_without_marker_uses_exact_worktree_environment(tmp_path: Path) -> None:
+    cli = _cli()
+    api = FakeAPI()
+
+    exit_code, _, _, connector_calls = _main(
+        cli,
+        ("beads", "init", "--skip-agents"),
+        project=_project(tmp_path),
+        runner=FakeRunner(),
+        api=api,
+    )
+
+    assert exit_code == 0
+    assert connector_calls == [("project-a", "dev")]
+    assert api.exec_calls == [
+        (
+            ("bd", "init", "--skip-agents"),
+            {
+                "environment": {"BEADS_DIR": "/workspace/.beads"},
+                "timeout": cli.BEADS_COMMAND_TIMEOUT_SECONDS,
+            },
+        )
+    ]
+
+
+def test_beads_with_regular_marker_preserves_exact_worktree_environment(tmp_path: Path) -> None:
+    cli = _cli()
+    project = _project(tmp_path)
+    _write_beads_marker(project)
+    api = FakeAPI()
+
+    exit_code, _, _, connector_calls = _main(
+        cli,
+        ("beads", "where"),
+        project=project,
+        runner=FakeRunner(),
+        api=api,
+    )
+
+    assert exit_code == 0
+    assert connector_calls == [("project-a", "dev")]
+    assert api.exec_calls == [
+        (
+            ("bd", "where"),
+            {
+                "environment": {"BEADS_DIR": "/workspace/.beads"},
+                "timeout": cli.BEADS_COMMAND_TIMEOUT_SECONDS,
+            },
+        )
+    ]
+
+
+def test_beads_rejects_non_regular_config_marker(tmp_path: Path) -> None:
+    cli = _cli()
+    project = _project(tmp_path)
+    marker = project.root / ".beads" / "config.yaml"
+    marker.mkdir(parents=True)
+    api = FakeAPI()
+
+    exit_code, _, _, connector_calls = _main(
+        cli,
+        ("beads", "where"),
+        project=project,
+        runner=FakeRunner(),
+        api=api,
+    )
+
+    assert exit_code == 1
+    assert connector_calls == []
+    assert api.exec_calls == []
 
 
 @pytest.mark.parametrize(
@@ -283,6 +426,7 @@ def test_remote_beads_uses_precedence_per_exec_and_redacts_streams(
         ExecResult(7, b"push " + secret + b"\n", b"error " + secret + b"\n"),
     ]
     project = _project(tmp_path)
+    _write_beads_marker(project)
     before = sorted(project.root.iterdir())
 
     exit_code, stdout, stderr, _ = _main(
@@ -328,10 +472,12 @@ def test_remote_beads_falls_back_to_bounded_host_gh_token(tmp_path: Path) -> Non
     runner = FakeRunner()
     api = FakeAPI()
 
+    project = _project(tmp_path)
+    _write_beads_marker(project)
     exit_code, _, _, _ = _main(
         cli,
         ("beads", "dolt", "pull"),
-        project=_project(tmp_path),
+        project=project,
         runner=runner,
         api=api,
     )
@@ -366,10 +512,12 @@ def test_remote_beads_reports_missing_credentials_without_leaking_gh_output(
             return super().__call__(arguments, **kwargs)
 
     api = FakeAPI()
+    project = _project(tmp_path)
+    _write_beads_marker(project)
     exit_code, stdout, stderr, _ = _main(
         cli,
         ("beads", "dolt", "pull"),
-        project=_project(tmp_path),
+        project=project,
         runner=FailingGHRunner(),
         api=api,
     )
@@ -377,6 +525,100 @@ def test_remote_beads_reports_missing_credentials_without_leaking_gh_output(
     assert exit_code == 1
     assert b"host-secret" not in stdout + stderr
     assert b"authentication token is unavailable" in stderr
+    assert api.exec_calls == []
+
+
+def test_real_beads_fallback_is_blocked_before_container_exec(tmp_path: Path) -> None:
+    cli = _cli()
+    common = tmp_path / "git-common"
+    primary = tmp_path / "primary"
+    linked = tmp_path / "linked"
+    isolated_env = dict(os.environ)
+    for name in ("BEADS_DIR", "GIT_COMMON_DIR", "GIT_DIR", "GIT_WORK_TREE"):
+        isolated_env.pop(name, None)
+    isolated_env.update(
+        {
+            "BD_NON_INTERACTIVE": "1",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "XDG_CONFIG_HOME": str(tmp_path / "xdg-config"),
+            "XDG_DATA_HOME": str(tmp_path / "xdg-data"),
+            "XDG_STATE_HOME": str(tmp_path / "xdg-state"),
+        }
+    )
+
+    def invoke(
+        *arguments: str,
+        env: Mapping[str, str] = isolated_env,
+        cwd: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            arguments,
+            check=False,
+            capture_output=True,
+            cwd=cwd,
+            env=env,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, (
+            f"command failed: {arguments!r}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        return result
+
+    invoke("git", "init", "--separate-git-dir", str(common), str(primary))
+    invoke("git", "-C", str(primary), "config", "user.name", "Boundary Test")
+    invoke("git", "-C", str(primary), "config", "user.email", "boundary@example.invalid")
+    invoke("git", "-C", str(primary), "commit", "--allow-empty", "-m", "initial")
+    invoke("git", "-C", str(primary), "worktree", "add", "-b", "boundary", str(linked))
+
+    resolved_common = Path(
+        invoke("git", "-C", str(linked), "rev-parse", "--git-common-dir").stdout.strip()
+    ).resolve()
+    assert resolved_common == common.resolve()
+    assert resolved_common.name == "git-common"
+
+    fallback = common / ".beads"
+    init_env = {**isolated_env, "BEADS_DIR": str(fallback)}
+    invoke(
+        "bd",
+        "init",
+        "--skip-agents",
+        "--skip-hooks",
+        "--non-interactive",
+        "--prefix",
+        "boundary",
+        env=init_env,
+        cwd=linked,
+    )
+    local_marker = linked / ".beads" / "config.yaml"
+    assert (fallback / "config.yaml").is_file()
+    assert not local_marker.exists()
+
+    raw_env = {**isolated_env, "BEADS_DIR": str(linked / ".beads")}
+    raw_where = invoke("bd", "where", env=raw_env, cwd=linked)
+    assert Path(raw_where.stdout.splitlines()[0]).resolve() == fallback.resolve()
+
+    project = SimpleNamespace(
+        root=linked,
+        git_common_dir=common,
+        git_dir=common / "worktrees" / "linked",
+        git_dir_relative=Path("worktrees/linked"),
+        name="boundary-project",
+    )
+    api = FakeAPI()
+    exit_code, stdout, stderr, connector_calls = _main(
+        cli,
+        ("beads", "where"),
+        project=project,
+        runner=FakeRunner(),
+        api=api,
+    )
+
+    assert exit_code == 1
+    assert stdout == b""
+    assert b"Beads is not initialized in this worktree" in stderr
+    assert connector_calls == []
     assert api.exec_calls == []
 
 

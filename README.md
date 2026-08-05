@@ -22,6 +22,7 @@ Go, Terraform, Task, Beads, or Python tools installed.
 ./dev status
 ./dev task versions
 ./dev task python:test
+./dev beads init --skip-agents
 ./dev beads --version
 ./dev shell
 ./dev down
@@ -43,6 +44,11 @@ and `./dev shell` inherits it from the Compose service. Database subtrees under
 `.beads/` remain ignored; only `.beads/config.yaml` and
 `.beads/issues.jsonl` are tracked projections. The launcher does not discover,
 migrate, or remove a database created at an earlier fallback location.
+Before `.beads/config.yaml` exists as a regular file in the worktree, the
+launcher rejects every Beads command without entering the Podman API, except a
+command whose first Beads argument is exactly `init`. That exception lets the
+pinned binary create the worktree-local database using the explicit anchor;
+after initialization, all Beads commands retain the same exact environment.
 
 The development container does not receive the Podman socket. Lifecycle,
 readiness, status, and noninteractive commands are bounded host operations;
