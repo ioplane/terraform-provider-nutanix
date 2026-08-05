@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
+import yaml
 from scripts.checks import pins
 
 
@@ -46,17 +48,13 @@ def valid_pin_repository(root: Path) -> None:
     compose = root / pins.COMPOSE_FILE
     compose.parent.mkdir(parents=True)
     compose.write_text(
-        "services:\n"
-        "  dev:\n"
-        "    build:\n"
-        "      context: ../..\n"
-        "      dockerfile: deployments/containers/Containerfile.dev\n"
-        "    volumes:\n"
-        "      - ../..:/workspace:z\n"
-        "volumes:\n"
-        "  go-mod-cache: {}\n"
-        "  go-build-cache: {}\n"
-        "  uv-cache: {}\n"
+        yaml.safe_dump(
+            {
+                "services": {"dev": pins._EXPECTED_COMPOSE_DEV_SERVICE},
+                "volumes": {name: {} for name in pins._EXPECTED_COMPOSE_NAMED_VOLUMES},
+            },
+            sort_keys=False,
+        )
     )
 
     manifest = root / pins.MANIFEST_FILE
@@ -184,20 +182,10 @@ def test_rejects_long_syntax_socket_mount(tmp_path: Path) -> None:
 
 
 def test_accepts_required_environment_expansion_in_volume_source(tmp_path: Path) -> None:
-    valid_pin_repository(tmp_path)
-    compose = tmp_path / pins.COMPOSE_FILE
-    compose.write_text(
-        "services:\n"
-        "  dev:\n"
-        "    volumes:\n"
-        "      - ${NUTANIX_GIT_COMMON_DIR:?required}:/git-metadata/.git:z\n"
-        "volumes:\n"
-        "  go-mod-cache: {}\n"
-        "  go-build-cache: {}\n"
-        "  uv-cache: {}\n"
+    assert (
+        pins._volume_source("${NUTANIX_GIT_COMMON_DIR:?required}:/git-metadata/.git:z")
+        == "${NUTANIX_GIT_COMMON_DIR:?required}"
     )
-
-    assert pins._compose_diagnostics(tmp_path) == []
 
 
 def test_rejects_named_volume_bind_override(tmp_path: Path) -> None:
@@ -242,6 +230,42 @@ def test_rejects_privileged_host_namespaces_and_socket_directory_mount(tmp_path:
     assert "Compose host pid namespace is forbidden" in diagnostics
     assert "Compose host network namespace is forbidden" in diagnostics
     assert "Compose runtime socket directory mount is forbidden" in diagnostics
+
+
+def test_rejects_extends_quoted_privileged_and_api_socket(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    compose = tmp_path / pins.COMPOSE_FILE
+    compose.write_text(
+        "services:\n"
+        "  dev:\n"
+        "    extends:\n"
+        "      file: escape.yml\n"
+        "      service: base\n"
+        '    privileged: "true"\n'
+        "    use_api_socket: true\n"
+        "volumes:\n"
+        "  go-mod-cache: {}\n"
+        "  go-build-cache: {}\n"
+        "  uv-cache: {}\n"
+    )
+
+    diagnostics = pins._compose_diagnostics(tmp_path)
+
+    assert "Compose service key is not allowed: extends" in diagnostics
+    assert "Compose service key is not allowed: privileged" in diagnostics
+    assert "Compose service key is not allowed: use_api_socket" in diagnostics
+
+
+def test_rejects_build_ssh_forwarding(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    compose = tmp_path / pins.COMPOSE_FILE
+    document = yaml.safe_load(compose.read_text())
+    service = copy.deepcopy(document["services"]["dev"])
+    service["build"]["ssh"] = ["default"]
+    document["services"]["dev"] = service
+    compose.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    assert "Compose dev service model differs" in pins._compose_diagnostics(tmp_path)
 
 
 def test_rejects_floating_action_and_ci_marker_drift(tmp_path: Path) -> None:
@@ -409,6 +433,34 @@ def test_required_ci_gate_cannot_be_conditionally_skipped_or_ignored(tmp_path: P
 
     assert "CI complete foundation gate must be unconditional" in diagnostics
     assert "CI complete foundation gate must fail the job" in diagnostics
+
+
+def test_required_ci_gate_rejects_shell_and_environment_overrides(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    content = workflow.read_text()
+    content = content.replace(
+        "jobs:\n",
+        "defaults:\n  run:\n    shell: bash -c 'true' -- {0}\njobs:\n",
+    )
+    content = content.replace(
+        "  foundation:\n",
+        "  foundation:\n    defaults:\n      run:\n        shell: bash -c 'true' -- {0}\n",
+    )
+    content = content.replace(
+        "      - run: ./dev task all\n",
+        "      - shell: bash -c 'true' -- {0}\n"
+        "        env:\n"
+        "          BASH_ENV: bypass.sh\n"
+        "        run: ./dev task all\n",
+    )
+    workflow.write_text(content)
+
+    diagnostics = pins.validate(tmp_path)
+
+    assert "CI workflow execution defaults are forbidden" in diagnostics
+    assert "CI foundation job execution defaults are forbidden" in diagnostics
+    assert "CI complete foundation gate execution overrides are forbidden" in diagnostics
 
 
 def test_requires_oci_labels_official_downloads_and_locked_verification(tmp_path: Path) -> None:

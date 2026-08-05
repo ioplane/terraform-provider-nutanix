@@ -211,9 +211,61 @@ _HOST_DEVELOPMENT_TOOL = re.compile(
     r"golangci-lint|govulncheck|goreleaser|tfplugindocs)(?=\s|$)"
 )
 _RISKY_COMPOSE_KEYS = frozenset({"cap_add", "devices", "security_opt", "sysctls", "volumes_from"})
+_ALLOWED_COMPOSE_SERVICE_KEYS = frozenset(
+    {
+        "build",
+        "command",
+        "environment",
+        "healthcheck",
+        "init",
+        "volumes",
+        "working_dir",
+    }
+)
 _EXPECTED_COMPOSE_TOP_LEVEL_KEYS = frozenset({"services", "volumes"})
 _EXPECTED_COMPOSE_SERVICES = frozenset({"dev"})
 _EXPECTED_COMPOSE_NAMED_VOLUMES = frozenset({"go-mod-cache", "go-build-cache", "uv-cache"})
+_EXPECTED_COMPOSE_DEV_SERVICE: dict[str, object] = {
+    "build": {
+        "context": "../..",
+        "dockerfile": "deployments/containers/Containerfile.dev",
+        "args": {
+            "OCI_VERSION": "${NUTANIX_DEV_VERSION:-0.0.0-dev}",
+            "OCI_REVISION": ("${NUTANIX_DEV_REVISION:-0000000000000000000000000000000000000000}"),
+            "OCI_CREATED": "${NUTANIX_DEV_CREATED:-1970-01-01T00:00:00Z}",
+        },
+    },
+    "init": True,
+    "working_dir": "/workspace",
+    "command": ["sleep", "infinity"],
+    "environment": {
+        "BEADS_DIR": "/workspace/.beads",
+        "GIT_COMMON_DIR": "/git-metadata/.git",
+        "GIT_DIR": "/git-metadata/.git/${NUTANIX_GIT_DIR_RELATIVE}",
+        "GIT_WORK_TREE": "/workspace",
+    },
+    "volumes": [
+        "../..:/workspace:z",
+        "${NUTANIX_GIT_COMMON_DIR:?required}:/git-metadata/.git:z",
+        "go-mod-cache:/go/pkg/mod",
+        "go-build-cache:/root/.cache/go-build",
+        "uv-cache:/opt/uv-cache",
+    ],
+    "healthcheck": {
+        "test": [
+            "CMD-SHELL",
+            (
+                "test -f /run/.containerenv && command -v go >/dev/null && "
+                "command -v terraform >/dev/null && command -v task >/dev/null && "
+                "command -v bd >/dev/null && command -v uv >/dev/null"
+            ),
+        ],
+        "interval": "10s",
+        "timeout": "5s",
+        "retries": 12,
+        "start_period": "5s",
+    },
+}
 _ALLOWED_COMPOSE_VOLUME_SOURCES = frozenset(
     {
         "../..",
@@ -339,6 +391,8 @@ def _compose_diagnostics(root: Path) -> list[str]:
         return diagnostics
     if set(services) != _EXPECTED_COMPOSE_SERVICES:
         diagnostics.append("Compose service set differs")
+    if services.get("dev") != _EXPECTED_COMPOSE_DEV_SERVICE:
+        diagnostics.append("Compose dev service model differs")
     named_volumes = document.get("volumes")
     if not isinstance(named_volumes, dict):
         diagnostics.append("Compose named volumes must be an object")
@@ -351,6 +405,14 @@ def _compose_diagnostics(root: Path) -> list[str]:
     for service in services.values():
         if not isinstance(service, dict):
             continue
+        for key in sorted(
+            key
+            for key in service
+            if isinstance(key, str) and key not in _ALLOWED_COMPOSE_SERVICE_KEYS
+        ):
+            diagnostics.append(f"Compose service key is not allowed: {key}")
+        if any(not isinstance(key, str) for key in service):
+            diagnostics.append("Compose service keys must be strings")
         if service.get("privileged") is True:
             diagnostics.append("Compose privileged execution is forbidden")
         if service.get("pid") == "host":
@@ -445,6 +507,10 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
         return ["CI workflow must be an object"]
 
     diagnostics: list[str] = []
+    if "defaults" in document:
+        diagnostics.append("CI workflow execution defaults are forbidden")
+    if "env" in document:
+        diagnostics.append("CI workflow environment overrides are forbidden")
     triggers = document.get("on")
     if not isinstance(triggers, dict) or set(triggers) != {"push", "pull_request"}:
         diagnostics.append("CI triggers must include push and pull_request")
@@ -473,6 +539,10 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
         diagnostics.append("CI foundation job must be unconditional")
     if "continue-on-error" in foundation:
         diagnostics.append("CI foundation job must fail the workflow")
+    if "defaults" in foundation:
+        diagnostics.append("CI foundation job execution defaults are forbidden")
+    if "env" in foundation:
+        diagnostics.append("CI foundation job environment overrides are forbidden")
 
     steps = foundation.get("steps")
     if not isinstance(steps, list) or not all(isinstance(step, dict) for step in steps):
@@ -565,6 +635,8 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
             diagnostics.append("CI complete foundation gate must be unconditional")
         if "continue-on-error" in complete_gate:
             diagnostics.append("CI complete foundation gate must fail the job")
+        if {"env", "shell", "working-directory"} & complete_gate.keys():
+            diagnostics.append("CI complete foundation gate execution overrides are forbidden")
     if not any(
         step.get("if") == "failure()"
         and isinstance(step.get("run"), str)
