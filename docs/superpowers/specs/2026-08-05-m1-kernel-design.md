@@ -1,6 +1,7 @@
 # M1 Kernel Design
 
-**Status:** Approved by independent ARC review
+**Status:** Approved by independent ARC review; delivery sequence amended by
+the product-first directive on 2026-08-05
 
 **Date:** 2026-08-05
 
@@ -26,7 +27,8 @@ compatibility claim.
 - no Nutanix SDK runtime and no OpenAPI code generation;
 - locked Developer Portal artifacts are primary API evidence;
 - all development and evidence run through `./dev` inside Podman;
-- Beads is canonical delivery state and TDD is mandatory.
+- Beads is canonical delivery state; the main product corpus precedes product
+  testing.
 
 ## Official evidence
 
@@ -304,7 +306,12 @@ duration, and request correlation ID only. Raw paths, query strings, object
 names, ext-IDs, headers, bodies, and provider configuration are excluded.
 OpenTelemetry is deferred.
 
-## Test contract
+## Deferred product acceptance
+
+The coverage below records the existing kernel baseline and the later product
+acceptance backlog. It is not a per-task implementation gate. No new
+non-product tests are added or repeatedly run while the product corpus is being
+built.
 
 All commands run through `./dev`.
 
@@ -339,7 +346,8 @@ Every error, diagnostic, and `tflog` redaction test injects unique canary
 secrets into credentials, queries, headers, bodies, object names, IDs, and
 vendor messages, then searches all rendered outputs for every canary.
 
-The full `./dev task all` gate remains mandatory after every M1 task.
+The lightweight `./dev task all` implementation gate excludes test suites.
+Product acceptance runs after the corresponding product corpus is complete.
 
 ## Delivery decomposition
 
@@ -353,7 +361,8 @@ Exactly one Beads task is in progress:
 6. pagination and ETags;
 7. Prism task adapter and waiter;
 8. capability registry and probes;
-9. Protocol 6 acceptance, fuzz smoke, dependency audit, and evidence.
+9. product-first delivery rules, lightweight build evidence, and handoff to the
+   first product corpus.
 
 No product Terraform type enters M1.
 

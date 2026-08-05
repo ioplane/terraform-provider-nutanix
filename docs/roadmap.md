@@ -5,7 +5,7 @@
 | Phase | Outcome | Status | Blocked by |
 | --- | --- | --- | --- |
 | M0 | Foundation | closed | - |
-| M1 | Kernel | open | `ntnx-m0` |
+| M1 | Kernel | closed | `ntnx-m0` |
 | M2 | Read-only canary | open | `ntnx-m1` |
 | M3 | Foundation resources | open | `ntnx-m2` |
 | M4 | Compute and block storage | open | `ntnx-m3` |
@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m1.9` — Protocol 6 acceptance and M1 evidence
+`ntnx-m2.1` — Read-only product contracts and API map

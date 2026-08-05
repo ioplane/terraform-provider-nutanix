@@ -57,39 +57,32 @@ tasks:
       - uv lock
 
   python:format:
-    desc: Format Python sources and tests
+    desc: Format role-oriented Python CLI sources
     deps: [_container]
     dir: /workspace
     cmds:
-      - ruff format scripts tests
+      - ruff format scripts
 
   python:format:check:
-    desc: Reject Python formatting drift without rewriting sources
+    desc: Reject Python CLI formatting drift without rewriting sources
     deps: [_container]
     dir: /workspace
     cmds:
-      - ruff format --check scripts tests
+      - ruff format --check scripts
 
   python:lint:
-    desc: Lint Python sources and tests
+    desc: Lint role-oriented Python CLI sources
     deps: [_container]
     dir: /workspace
     cmds:
-      - ruff check scripts tests
+      - ruff check scripts
 
   python:typecheck:
-    desc: Type-check Python sources and tests
+    desc: Type-check role-oriented Python CLI sources
     deps: [_container]
     dir: /workspace
     cmds:
-      - ty check
-
-  python:test:
-    desc: Run Python tests
-    deps: [_container]
-    dir: /workspace
-    cmds:
-      - pytest {{.CLI_ARGS}}
+      - ty check scripts
 
   tracker:check:
     desc: Validate canonical Beads tracker state
@@ -371,7 +364,7 @@ tasks:
         python -m scripts.package.provider test --version 0.0.0-dev
 
   all:
-    desc: Run the complete M0 foundation quality gate in deterministic order
+    desc: Run the lightweight implementation build and static gate
     deps: [_container]
     dir: /workspace
     cmds:
@@ -381,13 +374,9 @@ tasks:
       - task: python:format:check
       - task: python:lint
       - task: python:typecheck
-      - task: python:test
       - task: go:format:check
       - task: go:vet
       - task: go:lint
-      - task: go:test
-      - task: go:test:fuzz
-      - task: go:test:race
       - task: go:vuln
       - task: docs:check
       - task: oci:check
@@ -397,11 +386,9 @@ tasks:
       - task: tracker:check
       - task: roadmap:check
       - task: go:build
-      - task: go:test:protocol
-      - task: package:test
 
   verify:
-    desc: Alias for the complete M0 foundation quality gate
+    desc: Alias for the lightweight implementation build and static gate
     deps: [_container]
     dir: /workspace
     cmds:

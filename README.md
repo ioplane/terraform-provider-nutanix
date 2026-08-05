@@ -1,6 +1,6 @@
 # Terraform Provider for Nutanix
 
-> **Development status:** the M0 foundation is complete and M1 kernel implementation is in progress. Provider configuration plus the hand-written authentication, TLS, origin-bound HTTP, bounded response/error, redaction, structured logging, request-ID, fail-closed retry, callback pagination, guarded ETag, Prism task reader, neutral waiter, and capability-registry foundation are implemented; Protocol 6 kernel acceptance and M1 evidence are the active task. No runtime capability probe, Terraform resource, data source, or action is implemented. This repository is not ready for provider use.
+> **Development status:** the M0 foundation and M1 hand-written kernel are complete; the M2 read-only Nutanix product corpus is active. Provider configuration, authentication, TLS, origin-bound HTTP, bounded response/error handling, redaction, structured logging, request IDs, fail-closed retry, pagination, guarded ETags, Prism task handling, and the capability registry are implemented. No runtime capability probe, Terraform resource, data source, or action is registered yet. Product tests follow the corresponding product implementation. This repository is not ready for provider use.
 
 This project targets a greenfield Terraform provider for the Nutanix Cloud Platform. The M0 foundation establishes a handwritten modular monolith built with Terraform Plugin Framework and intended to use Terraform Plugin Protocol 6. It does not use a Nutanix SDK as a runtime dependency or generate implementation code from OpenAPI.
 
@@ -29,14 +29,13 @@ Go, Terraform, Task, Beads, or Python tools installed.
 ./dev down
 ```
 
-`all` is the canonical sequential M0 gate. It validates repository safety,
-downloads and verifies all 57 locked official API artifacts across 19 Nutanix
-namespaces, runs Python and Go quality checks (including the race detector and
-reachable-vulnerability scan), rejects generated-document drift, validates
-every container/tool/release pin, checks Beads and its roadmap projection,
-builds the provider, proves Terraform Protocol 6 loading, and verifies a
-byte-reproducible ZIP through a checksum-selected offline Terraform install.
-`verify` is an exact alias for `all`.
+`all` is the lightweight implementation gate. It validates repository safety
+and the locked official API artifacts, checks the role-oriented Python CLI and
+Go sources with formatting/static/security tools, verifies documentation and
+tracker consistency, and builds the provider. It does not run Python tooling
+tests, Go unit tests, fuzzing, race tests, Protocol acceptance, or package
+acceptance. Product tests are added and run only after the corresponding
+Nutanix product corpus is implemented. `verify` is an exact alias for `all`.
 
 `./dev task` and `./dev beads` preserve every following argument as a direct
 container argument. Build, test, lint, generation, packaging, Terraform, Task,

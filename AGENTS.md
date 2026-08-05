@@ -14,13 +14,27 @@ This file is the authoritative working contract for this repository.
 - Use the official, repository-locked `developers.nutanix.com` artifacts as the primary API evidence.
 - Hand-write transport code, DTOs, Terraform schemas, state models, and lifecycle logic.
 - Do not add a Nutanix SDK as a runtime dependency or use OpenAPI code generation.
-- Use test-driven development: red, green, refactor.
+- Implement the main product corpus before adding product tests.
+- Add tests only for Nutanix product behavior: Terraform schema and lifecycle,
+  API mapping, state, import, and authorized product acceptance. Do not add
+  tests for repository automation, launchers, Beads, documentation, roadmap,
+  CI wiring, or policy scripts.
+- Existing non-product tests are frozen and excluded from the default delivery
+  gate. Do not expand or repeatedly run them while implementing the product.
 
 ## Execution boundary
 
-- Run all Go, Terraform, Task, and Beads work, plus Python tests, linting, generation, and packaging, inside Podman through `./dev`.
+- Run all Go, Terraform, Task, and Beads work, plus Python CLI checks, linting,
+  generation, and packaging, inside Podman through `./dev`.
 - Limit the host to normal Git/GitHub operations, the Podman control plane, and the pinned `uv` bootstrap/control plane.
 - Do not use host toolchains as completion evidence.
+
+## CI/CD automation
+
+- GitLab CI/CD automation consists of small role-oriented Python CLI modules.
+- Each CLI has one responsibility, explicit arguments and environment inputs,
+  deterministic exit codes, and concise machine-readable output.
+- Do not build a general Python automation framework or a CI test harness.
 
 ### Temporary bootstrap exception
 
