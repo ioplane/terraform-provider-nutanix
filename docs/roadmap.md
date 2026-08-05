@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m0.4` — Nutanix Developer Portal artifact lock
+`ntnx-m0.5` — Empty Framework provider and protocol 6 handshake
