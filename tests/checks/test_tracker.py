@@ -16,6 +16,19 @@ def load_fixture() -> dict[str, list[dict[str, object]]]:
     return json.loads(FIXTURE.read_text())
 
 
+def write_projection(root: Path, state: dict[str, list[dict[str, object]]]) -> Path:
+    path = root / ".beads" / "issues.jsonl"
+    path.parent.mkdir(parents=True)
+    records: list[str] = []
+    for issue in state["issues"]:
+        record = copy.deepcopy(issue)
+        record.pop("parent", None)
+        record["_type"] = "issue"
+        records.append(json.dumps(record, sort_keys=True))
+    path.write_text("\n".join(records) + "\n")
+    return path
+
+
 class FixtureRunner:
     def __init__(self, state: dict[str, list[dict[str, object]]]) -> None:
         self.state = state
@@ -171,24 +184,76 @@ def test_rejects_invalid_json_from_bd() -> None:
         tracker.load_state(runner)
 
 
-def test_main_reports_valid_issue_count() -> None:
+def test_clean_checkout_validates_tracked_projection_without_database(tmp_path: Path) -> None:
+    write_projection(tmp_path, load_fixture())
+
+    def runner(arguments: Sequence[str]) -> str:
+        raise AssertionError(f"bd must not run in clean checkout: {arguments!r}")
+
     stdout = io.StringIO()
     stderr = io.StringIO()
 
-    exit_code = tracker.main(runner=FixtureRunner(load_fixture()), stdout=stdout, stderr=stderr)
+    exit_code = tracker.main(root=tmp_path, runner=runner, stdout=stdout, stderr=stderr)
 
     assert exit_code == 0
     assert stdout.getvalue() == "tracker: ok (19 issues, current ntnx-m0.3)\n"
     assert stderr.getvalue() == ""
 
 
-def test_main_fails_closed_with_deterministic_diagnostics() -> None:
+def test_local_database_rejects_tracked_projection_drift(tmp_path: Path) -> None:
+    projection = load_fixture()
+    write_projection(tmp_path, projection)
+    (tmp_path / ".beads" / "embeddeddolt" / "ntnx" / ".dolt").mkdir(parents=True)
+    live = copy.deepcopy(projection)
+    live["issues"][0]["title"] = "drifted live title"
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+
+    exit_code = tracker.main(
+        root=tmp_path,
+        runner=FixtureRunner(live),
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert exit_code == 1
+    assert stdout.getvalue() == ""
+    assert stderr.getvalue() == "tracker: tracked projection differs from live Beads state\n"
+
+
+def test_main_reports_valid_issue_count(tmp_path: Path) -> None:
     state = load_fixture()
+    write_projection(tmp_path, state)
+    (tmp_path / ".beads" / "embeddeddolt" / "ntnx" / ".dolt").mkdir(parents=True)
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+
+    exit_code = tracker.main(
+        root=tmp_path,
+        runner=FixtureRunner(state),
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert exit_code == 0
+    assert stdout.getvalue() == "tracker: ok (19 issues, current ntnx-m0.3)\n"
+    assert stderr.getvalue() == ""
+
+
+def test_main_fails_closed_with_deterministic_diagnostics(tmp_path: Path) -> None:
+    state = load_fixture()
+    write_projection(tmp_path, state)
+    (tmp_path / ".beads" / "embeddeddolt" / "ntnx" / ".dolt").mkdir(parents=True)
     state["ready"] = []
     stdout = io.StringIO()
     stderr = io.StringIO()
 
-    exit_code = tracker.main(runner=FixtureRunner(state), stdout=stdout, stderr=stderr)
+    exit_code = tracker.main(
+        root=tmp_path,
+        runner=FixtureRunner(state),
+        stdout=stdout,
+        stderr=stderr,
+    )
 
     assert exit_code == 1
     assert stdout.getvalue() == ""

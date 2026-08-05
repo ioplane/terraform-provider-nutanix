@@ -6,14 +6,16 @@ import json
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TextIO, cast
 
-from scripts.automation.process import run
+from scripts.automation.process import CommandError, run
 
 DESIGN_PATH = "docs/superpowers/specs/2026-08-04-foundation-design.md"
 PLAN_PATH = "docs/superpowers/plans/2026-08-04-foundation.md"
 REQUIRED_EPIC_IDS = tuple(f"ntnx-m{index}" for index in range(11))
 REQUIRED_M0_CHILD_IDS = tuple(f"ntnx-m0.{index}" for index in range(1, 9))
+PROJECTION_PATH = Path(".beads/issues.jsonl")
 REQUIRED_FIELDS = (
     "id",
     "title",
@@ -45,7 +47,10 @@ class TrackerState:
 
 
 def _run_bd(arguments: Sequence[str]) -> str:
-    return run(arguments, timeout=30.0).stdout
+    try:
+        return run(arguments, timeout=30.0).stdout
+    except (CommandError, OSError) as error:
+        raise TrackerInputError("cannot query local Beads database") from error
 
 
 def _parse_array(payload: str, source: str) -> tuple[Issue, ...]:
@@ -84,6 +89,82 @@ def load_state(runner: Runner = _run_bd) -> TrackerState:
         in_progress=snapshots["in_progress"],
         cycles=snapshots["cycles"],
     )
+
+
+def _projection_issue(value: object, line_number: int) -> Issue:
+    if not isinstance(value, dict) or value.get("_type") != "issue":
+        raise TrackerInputError(f"invalid tracked projection record at line {line_number}")
+    issue = cast(Issue, {key: item for key, item in value.items() if key != "_type"})
+    dependencies = issue.get("dependencies", [])
+    parents: list[str] = []
+    if isinstance(dependencies, list):
+        for dependency in dependencies:
+            if not isinstance(dependency, Mapping) or dependency.get("type") != "parent-child":
+                continue
+            parent = dependency.get("depends_on_id")
+            if isinstance(parent, str):
+                parents.append(parent)
+    if len(parents) > 1:
+        raise TrackerInputError(f"multiple projection parents at line {line_number}")
+    if parents:
+        existing = issue.get("parent")
+        if existing not in (None, parents[0]):
+            raise TrackerInputError(f"projection parent differs at line {line_number}")
+        issue["parent"] = parents[0]
+    return issue
+
+
+def load_projection(path: Path) -> TrackerState:
+    """Load and derive read-only tracker views from the committed Beads export."""
+    try:
+        payload = path.read_text()
+    except OSError as error:
+        raise TrackerInputError("tracked Beads projection is unavailable") from error
+    issues: list[Issue] = []
+    for line_number, line in enumerate(payload.splitlines(), start=1):
+        if not line.strip():
+            raise TrackerInputError(f"blank tracked projection record at line {line_number}")
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise TrackerInputError(
+                f"invalid tracked projection JSON at line {line_number}: {error.msg}"
+            ) from error
+        issues.append(_projection_issue(value, line_number))
+    if not issues:
+        raise TrackerInputError("tracked Beads projection is empty")
+
+    by_id = {_text(issue, "id"): issue for issue in issues if _text(issue, "id")}
+    ready = tuple(by_id[issue_id] for issue_id in _expected_ready(by_id))
+    in_progress = tuple(issue for issue in issues if _text(issue, "status") == "in_progress")
+    return TrackerState(
+        issues=tuple(issues),
+        ready=ready,
+        in_progress=in_progress,
+        cycles=(),
+    )
+
+
+def _database_present(root: Path) -> bool:
+    embedded = root / ".beads" / "embeddeddolt"
+    return embedded.is_dir() and any(path.is_dir() for path in embedded.glob("*/.dolt"))
+
+
+def _canonical_issues(issues: Sequence[Issue]) -> tuple[str, ...]:
+    return tuple(
+        sorted(json.dumps(issue, sort_keys=True, separators=(",", ":")) for issue in issues)
+    )
+
+
+def load_repository_state(root: Path, runner: Runner = _run_bd) -> TrackerState:
+    """Use the live database when present, otherwise the committed clean-clone projection."""
+    projection = load_projection(root / PROJECTION_PATH)
+    if not _database_present(root):
+        return projection
+    live = load_state(runner)
+    if _canonical_issues(live.issues) != _canonical_issues(projection.issues):
+        raise TrackerInputError("tracked projection differs from live Beads state")
+    return live
 
 
 def _text(issue: Mapping[str, object], field: str) -> str:
@@ -273,13 +354,15 @@ def validate(state: TrackerState) -> list[str]:
 
 def main(
     *,
+    root: Path | None = None,
     runner: Runner = _run_bd,
     stdout: TextIO = sys.stdout,
     stderr: TextIO = sys.stderr,
 ) -> int:
     """Run the tracker contract gate and return a process exit code."""
+    selected_root = Path.cwd() if root is None else root
     try:
-        state = load_state(runner)
+        state = load_repository_state(selected_root, runner)
     except TrackerInputError as error:
         print(f"tracker: {error}", file=stderr)
         return 1

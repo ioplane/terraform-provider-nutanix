@@ -120,7 +120,9 @@ def render(issues: object, in_progress: object) -> str:
 
 
 def _document(runner: tracker.Runner | None) -> str:
-    state = tracker.load_state() if runner is None else tracker.load_state(runner)
+    state = (
+        tracker.load_repository_state(Path.cwd()) if runner is None else tracker.load_state(runner)
+    )
     diagnostics = tracker.validate(state)
     if diagnostics:
         raise RoadmapError("tracker state is invalid: " + "; ".join(diagnostics))

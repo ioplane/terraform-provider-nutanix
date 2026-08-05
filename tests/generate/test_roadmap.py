@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import io
 import json
 import random
@@ -14,6 +15,18 @@ FIXTURE = Path("tests/fixtures/tracker/valid.json")
 
 def load_fixture() -> dict[str, list[dict[str, object]]]:
     return json.loads(FIXTURE.read_text())
+
+
+def write_projection(root: Path, state: dict[str, list[dict[str, object]]]) -> None:
+    path = root / ".beads" / "issues.jsonl"
+    path.parent.mkdir(parents=True)
+    records: list[str] = []
+    for issue in state["issues"]:
+        record = copy.deepcopy(issue)
+        record.pop("parent", None)
+        record["_type"] = "issue"
+        records.append(json.dumps(record, sort_keys=True))
+    path.write_text("\n".join(records) + "\n")
 
 
 def test_roadmap_is_stable_and_sorts_phase_numbers_numerically() -> None:
@@ -96,6 +109,19 @@ def test_check_reports_projection_drift_without_rewriting(tmp_path: Path) -> Non
 
     assert not roadmap.check(destination, runner=FixtureRunner(load_fixture()))
     assert destination.read_text() == "authored status\n"
+
+
+def test_check_clean_checkout_uses_tracked_projection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = load_fixture()
+    write_projection(tmp_path, state)
+    destination = tmp_path / "docs" / "roadmap.md"
+    destination.parent.mkdir()
+    destination.write_text(roadmap.render(state["issues"], state["in_progress"]))
+    monkeypatch.chdir(tmp_path)
+
+    assert roadmap.check(Path("docs/roadmap.md"))
 
 
 def test_main_generates_and_checks_projection(tmp_path: Path) -> None:
