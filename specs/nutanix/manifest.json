@@ -1,0 +1,538 @@
+{
+  "namespaces": [
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 13322,
+          "media_type": "application/json",
+          "path": "aiops/v4.0/errors.json",
+          "sha256": "dc954cf160b5b456feb3e75d61122d2c230b5e6c2d40c2a74cc239367ab54ec4",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/aiops/versions/v4.0/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 303963,
+          "media_type": "text/plain",
+          "path": "aiops/v4.0/openapi.yaml",
+          "sha256": "319f5e77e0a14d5b744a0eec8a3f2dabfb214e86ec4ef4863d57018670700833",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/aiops/versions/v4.0/yaml"
+        },
+        "postman": {
+          "bytes": 1281878,
+          "media_type": "text/plain",
+          "path": "aiops/v4.0/postman.json",
+          "sha256": "607d34925629e52779396ce352d2f701af19ec9f1fc32f06f7f422a4bdd57544",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/aiops/versions/v4.0/postman-collection"
+        }
+      },
+      "name": "aiops",
+      "stability": "ga",
+      "version": "v4.0"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 23417,
+          "media_type": "application/json",
+          "path": "clustermgmt/v4.2/errors.json",
+          "sha256": "2ce95dc739f7ecc6bde7950de0a7973ac3796642afa611e72c6314d329a0f1ef",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/clustermgmt/versions/v4.2/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 1915139,
+          "media_type": "text/plain",
+          "path": "clustermgmt/v4.2/openapi.yaml",
+          "sha256": "ec8ec2382665a1e5432dcea189b3cae074460ef10ce68463621fc9c6e3d9f167",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/clustermgmt/versions/v4.2/yaml"
+        },
+        "postman": {
+          "bytes": 21295515,
+          "media_type": "text/plain",
+          "path": "clustermgmt/v4.2/postman.json",
+          "sha256": "f40fd0d573fd1ac3c2317907934004852ea7688c9374999af1c6cb922707fd3b",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/clustermgmt/versions/v4.2/postman-collection"
+        }
+      },
+      "name": "clustermgmt",
+      "stability": "ga",
+      "version": "v4.2"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 7386,
+          "media_type": "application/json",
+          "path": "datapolicies/v4.2/errors.json",
+          "sha256": "1d9ec177e86080671ef189f7d06a7aad87c1cdb79942f09aa67d5264a4b511f8",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/datapolicies/versions/v4.2/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 944925,
+          "media_type": "text/plain",
+          "path": "datapolicies/v4.2/openapi.yaml",
+          "sha256": "c17665f4a651b972bee446ebc1e09a74df11157eae4bab41cf886d2a881b5c0f",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/datapolicies/versions/v4.2/yaml"
+        },
+        "postman": {
+          "bytes": 2010738,
+          "media_type": "text/plain",
+          "path": "datapolicies/v4.2/postman.json",
+          "sha256": "f01a94a6476995e59c238ca122fdbe4a4c7e1212162840d0d44c019bc6bdfe1a",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/datapolicies/versions/v4.2/postman-collection"
+        }
+      },
+      "name": "datapolicies",
+      "stability": "ga",
+      "version": "v4.2"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 6719,
+          "media_type": "application/json",
+          "path": "dataprotection/v4.3/errors.json",
+          "sha256": "08279654a346fdcd63298a62c33e9cd23e55ad29bc9a8f68f10966320d0b19af",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/dataprotection/versions/v4.3/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 630728,
+          "media_type": "text/plain",
+          "path": "dataprotection/v4.3/openapi.yaml",
+          "sha256": "b2e081eac10fbadf3254e614089cee3fa60457aa639d7596828a616c42808639",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/dataprotection/versions/v4.3/yaml"
+        },
+        "postman": {
+          "bytes": 6841112,
+          "media_type": "text/plain",
+          "path": "dataprotection/v4.3/postman.json",
+          "sha256": "186865cec2e4882502f440337644543ea70359ef4703b18982a8773aeb369279",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/dataprotection/versions/v4.3/postman-collection"
+        }
+      },
+      "name": "dataprotection",
+      "stability": "ga",
+      "version": "v4.3"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 61685,
+          "media_type": "application/json",
+          "path": "files/v4.0/errors.json",
+          "sha256": "3b49addc57d7408932ddf882fce5a0fc884413bd90c4e5729ae6ab712ba07e0b",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/files/versions/v4.0/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 1760317,
+          "media_type": "text/plain",
+          "path": "files/v4.0/openapi.yaml",
+          "sha256": "5b0fc13c2fc6ad181bf901ab579a4fef023edc41f71e767f672c90a726b519d6",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/files/versions/v4.0/yaml"
+        },
+        "postman": {
+          "bytes": 11454409,
+          "media_type": "text/plain",
+          "path": "files/v4.0/postman.json",
+          "sha256": "04772e196e7c1b99c43b7298537dd35e6922d9f8d89c319a0af313275c7452a4",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/files/versions/v4.0/postman-collection"
+        }
+      },
+      "name": "files",
+      "stability": "ga",
+      "version": "v4.0"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 36284,
+          "media_type": "application/json",
+          "path": "iam/v4.0/errors.json",
+          "sha256": "dcf067ba29011c662da6219b4ad8d42ee160de865835520fdd3f5e31c0442a79",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/iam/versions/v4.0/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 748189,
+          "media_type": "text/plain",
+          "path": "iam/v4.0/openapi.yaml",
+          "sha256": "596c9c11d6db7f3005616fad3f32f1fc292178e23012db9509f0fdcc5cf6d6b3",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/iam/versions/v4.0/yaml"
+        },
+        "postman": {
+          "bytes": 2697127,
+          "media_type": "text/plain",
+          "path": "iam/v4.0/postman.json",
+          "sha256": "d797a4a97c3c89799a3e9926d9eb343b3c704aab9b115f44bcb3662501a46dc6",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/iam/versions/v4.0/postman-collection"
+        }
+      },
+      "name": "iam",
+      "stability": "ga",
+      "version": "v4.0"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 8680,
+          "media_type": "application/json",
+          "path": "licensing/v4.3/errors.json",
+          "sha256": "6502ab3b2bfc1ab84e870afe16ad9a1ab93a2b727531def120362fae1cdbab34",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/licensing/versions/v4.3/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 358480,
+          "media_type": "text/plain",
+          "path": "licensing/v4.3/openapi.yaml",
+          "sha256": "d5475e4a2ec572d0f87381229160ed2f663cd4fc86d56c57fd75627d7724d0a5",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/licensing/versions/v4.3/yaml"
+        },
+        "postman": {
+          "bytes": 1123341,
+          "media_type": "text/plain",
+          "path": "licensing/v4.3/postman.json",
+          "sha256": "1698bd305810865c97856dc64e56fefce1bf87f2457b7b74632e1c40ad882835",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/licensing/versions/v4.3/postman-collection"
+        }
+      },
+      "name": "licensing",
+      "stability": "ga",
+      "version": "v4.3"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 44338,
+          "media_type": "application/json",
+          "path": "lifecycle/v4.2/errors.json",
+          "sha256": "4a99858196e5774971673cf5cf744da57d9c0a34f6d07ec91d52feee5cc98d6a",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/lifecycle/versions/v4.2/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 672258,
+          "media_type": "text/plain",
+          "path": "lifecycle/v4.2/openapi.yaml",
+          "sha256": "e9af90df0e8280bd492a503d8bc1690e534dee332fd14c850059fa8801674cc3",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/lifecycle/versions/v4.2/yaml"
+        },
+        "postman": {
+          "bytes": 8920386,
+          "media_type": "text/plain",
+          "path": "lifecycle/v4.2/postman.json",
+          "sha256": "e0e50718debeac0be98fa58a1a82f9fdf51909662b0c4ecc89d5bbd29bc39d33",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/lifecycle/versions/v4.2/postman-collection"
+        }
+      },
+      "name": "lifecycle",
+      "stability": "ga",
+      "version": "v4.2"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 21338,
+          "media_type": "application/json",
+          "path": "microseg/v4.2/errors.json",
+          "sha256": "c50e59bb1ebb819565a1fa5339613b8a509db5b8e9e05181eaea48345fae5539",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/microseg/versions/v4.2/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 698143,
+          "media_type": "text/plain",
+          "path": "microseg/v4.2/openapi.yaml",
+          "sha256": "31fae97d3b2a9f749f8d62abcc72cdce66f98a899257d858076cffea5858fa0a",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/microseg/versions/v4.2/yaml"
+        },
+        "postman": {
+          "bytes": 1455828,
+          "media_type": "text/plain",
+          "path": "microseg/v4.2/postman.json",
+          "sha256": "9fc35f00088613a5c7db33399e8d96cd36344f781dc84eede4a5b78b324d245e",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/microseg/versions/v4.2/postman-collection"
+        }
+      },
+      "name": "microseg",
+      "stability": "ga",
+      "version": "v4.2"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 19921,
+          "media_type": "application/json",
+          "path": "monitoring/v4.2/errors.json",
+          "sha256": "1ff03a53a0f7409028e801d5c73db6f24e711482a66652a1bb66f15c45508abf",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/monitoring/versions/v4.2/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 547846,
+          "media_type": "text/plain",
+          "path": "monitoring/v4.2/openapi.yaml",
+          "sha256": "f04bc26cbc9998a78efb7914b1c12b52291a33a5e729175d202a01e4e98c327e",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/monitoring/versions/v4.2/yaml"
+        },
+        "postman": {
+          "bytes": 1815584,
+          "media_type": "text/plain",
+          "path": "monitoring/v4.2/postman.json",
+          "sha256": "5ee01b7e00aa1dfe54b990b4fec812c0f058195b4395a9eb302408efe545494c",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/monitoring/versions/v4.2/postman-collection"
+        }
+      },
+      "name": "monitoring",
+      "stability": "ga",
+      "version": "v4.2"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 7807,
+          "media_type": "application/json",
+          "path": "multidomain/v4.3/errors.json",
+          "sha256": "e7b587733524328d06c18c54395c8eacac7c17ff07dff913baf6cd9d921d0987",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/multidomain/versions/v4.3/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 320907,
+          "media_type": "text/plain",
+          "path": "multidomain/v4.3/openapi.yaml",
+          "sha256": "049107c135c52eb1f845bd55a52d363885c2693ab7c211cb4210dc9cfe598cbd",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/multidomain/versions/v4.3/yaml"
+        },
+        "postman": {
+          "bytes": 618071,
+          "media_type": "text/plain",
+          "path": "multidomain/v4.3/postman.json",
+          "sha256": "af6fd8c3a0d61738aee8189c40d4eeab69db3ef09f8a708cc81fbd48a1e53066",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/multidomain/versions/v4.3/postman-collection"
+        }
+      },
+      "name": "multidomain",
+      "stability": "ga",
+      "version": "v4.3"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 7931,
+          "media_type": "application/json",
+          "path": "networking/v4.3/errors.json",
+          "sha256": "7ae7186ed0acd4e953e8a95489580d826402ba7a94ef40849589effb4bdd1031",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/networking/versions/v4.3/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 2580155,
+          "media_type": "text/plain",
+          "path": "networking/v4.3/openapi.yaml",
+          "sha256": "d80246a462ecade8d39314eab87df38ded35ede57ec898182a15f3eb077878b2",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/networking/versions/v4.3/yaml"
+        },
+        "postman": {
+          "bytes": 10313348,
+          "media_type": "text/plain",
+          "path": "networking/v4.3/postman.json",
+          "sha256": "49f9b0c9c6a86ca0fa5e50c1681a50ebdd848e1966aafdb98a63cc40b4e70d05",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/networking/versions/v4.3/postman-collection"
+        }
+      },
+      "name": "networking",
+      "stability": "ga",
+      "version": "v4.3"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 13089,
+          "media_type": "application/json",
+          "path": "objects/v4.0/errors.json",
+          "sha256": "e9d710564fc1fb96c54fb07b9ff476bf625ed9150637c137cb9d2305d232d669",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/objects/versions/v4.0/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 243312,
+          "media_type": "text/plain",
+          "path": "objects/v4.0/openapi.yaml",
+          "sha256": "a057d67afaa5a32cdadf7c9599231bfe1cc34445ee4b38d51cf1d126ab990f9a",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/objects/versions/v4.0/yaml"
+        },
+        "postman": {
+          "bytes": 458404,
+          "media_type": "text/plain",
+          "path": "objects/v4.0/postman.json",
+          "sha256": "9f67ee83bc8ec1dcbdd482234ecde7eafd1c8ad849e0f1e57171196c6e5c7aff",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/objects/versions/v4.0/postman-collection"
+        }
+      },
+      "name": "objects",
+      "stability": "ga",
+      "version": "v4.0"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 6211,
+          "media_type": "application/json",
+          "path": "opsmgmt/v4.0/errors.json",
+          "sha256": "63615d9bc71e6db525d7ea863d121836c476d258aedf15fbe56e16592378a499",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/opsmgmt/versions/v4.0/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 339525,
+          "media_type": "text/plain",
+          "path": "opsmgmt/v4.0/openapi.yaml",
+          "sha256": "1f51d3f75e680c9d947f1c1bda2c8652ff6bfb7a74ee8f2fe427b2cd647932a6",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/opsmgmt/versions/v4.0/yaml"
+        },
+        "postman": {
+          "bytes": 1851617,
+          "media_type": "text/plain",
+          "path": "opsmgmt/v4.0/postman.json",
+          "sha256": "dbf7b1e645060d623b99d33eb6086268b0cfa8f385e6a9f9f638a5f33154088a",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/opsmgmt/versions/v4.0/postman-collection"
+        }
+      },
+      "name": "opsmgmt",
+      "stability": "ga",
+      "version": "v4.0"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 51185,
+          "media_type": "application/json",
+          "path": "prism/v4.3/errors.json",
+          "sha256": "eadf36e96dcb8f705996291225fa94b938c0d6762e71ea7d9be7d7f5cb97d0e5",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/prism/versions/v4.3/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 825239,
+          "media_type": "text/plain",
+          "path": "prism/v4.3/openapi.yaml",
+          "sha256": "efb04f7aff22e65b3abaf099d3a4cbd113b27d18375f504ea384ed432bb13976",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/prism/versions/v4.3/yaml"
+        },
+        "postman": {
+          "bytes": 2920907,
+          "media_type": "text/plain",
+          "path": "prism/v4.3/postman.json",
+          "sha256": "9fc9534935d63e73a1de2308135dc45494ce7667067adca81985c08dc0d5948a",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/prism/versions/v4.3/postman-collection"
+        }
+      },
+      "name": "prism",
+      "stability": "ga",
+      "version": "v4.3"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 7400,
+          "media_type": "application/json",
+          "path": "security/v4.1/errors.json",
+          "sha256": "a4334e0a9335498111198eb71d4b1ebfd5aa154560ded1fe7a01b5dc3f8bf9a4",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/security/versions/v4.1/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 421636,
+          "media_type": "text/plain",
+          "path": "security/v4.1/openapi.yaml",
+          "sha256": "b05f8dbf0f4922d86a81b34e0ee0222872f0c01e4dfa3de22edad520bb976bbc",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/security/versions/v4.1/yaml"
+        },
+        "postman": {
+          "bytes": 1180812,
+          "media_type": "text/plain",
+          "path": "security/v4.1/postman.json",
+          "sha256": "fcab179b2bf851e57b22a99575460bddf31babe61df7084776f129d6dfc4a523",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/security/versions/v4.1/postman-collection"
+        }
+      },
+      "name": "security",
+      "stability": "ga",
+      "version": "v4.1"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 3539,
+          "media_type": "application/json",
+          "path": "storage/v4.0.a3/errors.json",
+          "sha256": "ebe9dde80e7d263fb0e7e17c9b7c976f5b476487eff92cc91d385fcf603a333b",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/storage/versions/v4.0.a3/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 328619,
+          "media_type": "text/plain",
+          "path": "storage/v4.0.a3/openapi.yaml",
+          "sha256": "23685a3498e2097514d74cbce0301e4c96cfd2137d47cbe290c9c4972c570a9a",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/storage/versions/v4.0.a3/yaml"
+        },
+        "postman": {
+          "bytes": 751171,
+          "media_type": "text/plain",
+          "path": "storage/v4.0.a3/postman.json",
+          "sha256": "6b93c26892d0263c8da2de40d5431daa82b52b8d5e0e3c37bcb85072d20a0da9",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/storage/versions/v4.0.a3/postman-collection"
+        }
+      },
+      "name": "storage",
+      "stability": "preview",
+      "version": "v4.0.a3"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 162163,
+          "media_type": "application/json",
+          "path": "vmm/v4.2/errors.json",
+          "sha256": "d9c1c27b249c8d5be1f198275fc0d9cde86ff14f743ef567f8464e5da3af1724",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/vmm/versions/v4.2/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 3935137,
+          "media_type": "text/plain",
+          "path": "vmm/v4.2/openapi.yaml",
+          "sha256": "e5e6ff8a14a009f7a0a50a6cad0b73011cd0b32cdf40e8b8f7f3e9a30124966a",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/vmm/versions/v4.2/yaml"
+        },
+        "postman": {
+          "bytes": 30903910,
+          "media_type": "text/plain",
+          "path": "vmm/v4.2/postman.json",
+          "sha256": "2bf2fe353a83631ea84ab2c33c39c123c856154a229ae3e5558d6a67b5a9deae",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/vmm/versions/v4.2/postman-collection"
+        }
+      },
+      "name": "vmm",
+      "stability": "ga",
+      "version": "v4.2"
+    },
+    {
+      "artifacts": {
+        "errors": {
+          "bytes": 2015,
+          "media_type": "application/json",
+          "path": "volumes/v4.2/errors.json",
+          "sha256": "5f634a4c2cf0403192fccff7b6f87b1cf62ddb4367cac70a1e39dd1d895cefd6",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/volumes/versions/v4.2/locale/en_US/error"
+        },
+        "openapi": {
+          "bytes": 614126,
+          "media_type": "text/plain",
+          "path": "volumes/v4.2/openapi.yaml",
+          "sha256": "fd665bbab72beec7bd0a915504d6a8ab40988ad7134081afc0a384cc5d159088",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/volumes/versions/v4.2/yaml"
+        },
+        "postman": {
+          "bytes": 1401735,
+          "media_type": "text/plain",
+          "path": "volumes/v4.2/postman.json",
+          "sha256": "1c301f4fcafe523e05d652cd5f80e177449bb5c1be32359346a6037fa7cfc9ac",
+          "url": "https://developers.nutanix.com/api/v1/namespaces/volumes/versions/v4.2/postman-collection"
+        }
+      },
+      "name": "volumes",
+      "stability": "ga",
+      "version": "v4.2"
+    }
+  ],
+  "schema_version": 1,
+  "source": "https://developers.nutanix.com/api/v1/"
+}

@@ -18,6 +18,20 @@ Discovery, update, and verification use GET, not HEAD. Verification checks the
 returned media type, content shape, byte count, and SHA-256 digest rather than
 inferring availability from headers.
 
+The 2026-08-04 live lock labels all 19 selected OpenAPI documents and all 19
+selected Postman collections as `text/plain; charset=utf-8`; all 19 English
+error references use `application/json`. The lock pipeline accepts `text/plain`
+for OpenAPI YAML and Postman collections only. A Postman body must still parse
+as JSON with an `item` array, and the manifest records the observed
+`text/plain` media type. Registry, version, and error-reference documents still
+require a JSON media type. This explicit compatibility exception does not apply
+to arbitrary artifact kinds.
+
+The pipeline rejects redirects before following them when their target leaves
+the exact Developer Portal API prefix. Registry-supplied URLs may not contain
+userinfo, query strings, fragments, percent-encoded path bytes, or traversal
+segments. Reads are bounded and never include a response body in diagnostics.
+
 ## Locked namespace set
 
 There is no single global Nutanix API version. M0 locks one selected version
@@ -55,6 +69,11 @@ The approved initial lock is:
 namespace and version it records stability and the published OpenAPI, Postman,
 and English error-reference artifact URLs when available. Each locked artifact
 records its URL, expected media type, byte count, and SHA-256 digest.
+The manifest and each cache body are written through a temporary file in the
+destination directory followed by atomic replacement. The manifest has no
+wall-clock timestamp, so an unchanged portal produces byte-identical lock
+content. A staged-file gate rejects vendor cache paths even if they were added
+with Git's force option.
 
 Downloaded bodies live only under the repository-ignored
 `.cache/nutanix/artifacts/` tree. The provider never downloads registry or

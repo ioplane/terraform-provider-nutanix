@@ -94,3 +94,39 @@ tasks:
     dir: /workspace
     cmds:
       - python -m scripts.generate.roadmap --check docs/roadmap.md
+
+  artifacts:discover:
+    desc: Discover the live GA-first Nutanix API selection without writes
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.artifacts.nutanix discover
+
+  artifacts:update:
+    desc: Download and lock official Nutanix API artifacts
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.artifacts.nutanix update
+
+  artifacts:verify:
+    desc: Verify the live Nutanix registry and every locked artifact
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.artifacts.nutanix verify
+
+  artifacts:count:
+    desc: Print the locked Nutanix namespace count
+    deps: [_container]
+    dir: /workspace
+    silent: true
+    cmds:
+      - python -m scripts.artifacts.nutanix count
+
+  repo:staged-cache-check:
+    desc: Reject staged Nutanix vendor artifact bodies
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.checks.staged
