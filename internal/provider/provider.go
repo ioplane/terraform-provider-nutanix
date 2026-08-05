@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/ioplane/terraform-provider-nutanix/internal/auth"
+	"github.com/ioplane/terraform-provider-nutanix/internal/capability"
 	"github.com/ioplane/terraform-provider-nutanix/internal/transport"
 )
 
@@ -25,7 +26,8 @@ type nutanixProvider struct {
 }
 
 type configuredProviderData struct {
-	client *transport.Client
+	client       *transport.Client
+	capabilities *capability.Registry
 }
 
 // New returns a factory for the Nutanix provider.
@@ -181,7 +183,15 @@ func composeProviderData(
 	if err != nil {
 		return configuredProviderData{}, mapClientConfigurationError(err)
 	}
-	return configuredProviderData{client: client}, nil
+	capabilities, err := capability.NewRegistry(nil)
+	if err != nil {
+		return configuredProviderData{}, newConfigurationError(
+			"endpoint",
+			ConfigurationErrorEndpoint,
+			"capability registry could not be constructed",
+		)
+	}
+	return configuredProviderData{client: client, capabilities: capabilities}, nil
 }
 
 func mapClientConfigurationError(err error) *ConfigurationError {

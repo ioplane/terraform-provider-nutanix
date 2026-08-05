@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m1.8` — Capability registry and approved probes
+`ntnx-m1.9` — Protocol 6 acceptance and M1 evidence

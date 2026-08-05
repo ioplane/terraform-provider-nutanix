@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
+	"github.com/ioplane/terraform-provider-nutanix/internal/capability"
 	"github.com/ioplane/terraform-provider-nutanix/internal/transport"
 )
 
@@ -293,6 +294,19 @@ func TestConfigureBuildsClientWithoutNetwork(t *testing.T) {
 			}
 			if data.client == nil {
 				t.Fatal("provider composition returned nil configured client")
+			}
+			if data.capabilities == nil {
+				t.Fatal("provider composition returned nil capability registry")
+			}
+			supported, capabilityErr := data.capabilities.Check(context.Background(), "pc_2024_3")
+			var typedCapabilityErr *capability.CapabilityError
+			if supported || !errors.As(capabilityErr, &typedCapabilityErr) ||
+				typedCapabilityErr.Kind() != capability.FailureIndeterminate ||
+				!errors.Is(capabilityErr, capability.ErrCapabilityIndeterminate) {
+				t.Fatalf("unapproved capability check = %t, %v; want indeterminate", supported, capabilityErr)
+			}
+			if got := requestCount.Load(); got != 0 {
+				t.Fatalf("empty capability registry made %d network requests, want 0", got)
 			}
 		})
 	}
