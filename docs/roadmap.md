@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m0.6` — Repository gates, generated docs, and deterministic package
+`ntnx-m0.7` — GitHub CI, dependency automation, and repository controls
