@@ -278,6 +278,12 @@ tasks:
         -fuzz '^FuzzPaginationMetadata$'
         -fuzztime=1s
         -parallel=1
+      - >-
+        go test ./internal/nutanix/prism
+        -run '^$'
+        -fuzz '^FuzzTaskResponseDecode$'
+        -fuzztime=1s
+        -parallel=1
 
   go:test:protocol:
     desc: Prove the provider loads through Terraform Plugin Protocol 6 without live Nutanix access

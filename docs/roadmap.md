@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m1.7` — Prism v4.3 task reader and neutral waiter
+`ntnx-m1.8` — Capability registry and approved probes
