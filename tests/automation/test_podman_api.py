@@ -822,7 +822,13 @@ while True:
     assert completed.returncode in {124, 137, -9}
     assert completed.stdout.count(b"tick") >= 2
     assert 0.25 <= elapsed < 1.5
-    assert not Path(f"/proc/{child_pid}").exists()
+    process_path = Path(f"/proc/{child_pid}")
+    reaping_deadline = time.monotonic() + 1.0
+    while process_path.exists() and time.monotonic() < reaping_deadline:
+        time.sleep(0.01)
+    status_path = process_path / "status"
+    status = status_path.read_text() if status_path.is_file() else ""
+    assert not process_path.exists(), status
 
 
 def test_module_has_no_subprocess_or_cli_fallback(podman_api: ModuleType) -> None:
