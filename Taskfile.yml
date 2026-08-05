@@ -130,3 +130,97 @@ tasks:
     dir: /workspace
     cmds:
       - python -m scripts.checks.staged
+
+  go:mod:init:
+    desc: Initialize the exact Go module and download pinned provider dependencies
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - |
+        set -eu
+        test "$(go env GOTOOLCHAIN)" = local
+        if test ! -e go.mod; then
+          go mod init github.com/ioplane/terraform-provider-nutanix
+          go mod edit -go=1.26.0
+          go mod edit -require=github.com/hashicorp/terraform-plugin-framework@v1.19.0
+          go mod edit -require=github.com/hashicorp/terraform-plugin-testing@v1.16.0
+        fi
+        grep -Fx 'module github.com/ioplane/terraform-provider-nutanix' go.mod
+        grep -Fx 'go 1.26.0' go.mod
+        ! grep -Eq '^toolchain ' go.mod
+        grep -Eq '^[[:space:]]+github.com/hashicorp/terraform-plugin-framework v1.19.0$' go.mod
+        grep -Eq '^[[:space:]]+github.com/hashicorp/terraform-plugin-testing v1.16.0$' go.mod
+        ! grep -Eiq 'nutanix.*sdk|sdk.*nutanix' go.mod
+        go mod download
+
+  go:mod:tidy:
+    desc: Tidy the Go module with the local pinned toolchain
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - |
+        set -eu
+        test "$(go env GOTOOLCHAIN)" = local
+        go mod tidy
+        grep -Fx 'module github.com/ioplane/terraform-provider-nutanix' go.mod
+        grep -Fx 'go 1.26.0' go.mod
+        ! grep -Eq '^toolchain ' go.mod
+        grep -Eq '^[[:space:]]+github.com/hashicorp/terraform-plugin-framework v1.19.0$' go.mod
+        grep -Eq '^[[:space:]]+github.com/hashicorp/terraform-plugin-testing v1.16.0$' go.mod
+        ! grep -Eiq 'nutanix.*sdk|sdk.*nutanix' go.mod
+
+  go:test:
+    desc: Run Go tests
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - go test {{.CLI_ARGS | default "./..."}}
+
+  go:test:protocol:
+    desc: Prove the provider loads through Terraform Plugin Protocol 6 without live Nutanix access
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - |
+        test "$(terraform version -json | python -c 'import json, sys; print(json.load(sys.stdin)["terraform_version"])')" = 1.15.8
+        TF_ACC=1 \
+        TF_ACC_PROVIDER_NAMESPACE=ioplane \
+        TF_ACC_TERRAFORM_PATH=/usr/local/bin/terraform \
+        TF_ACC_TERRAFORM_VERSION=1.15.8 \
+        go test -count=1 \
+          -run '^(TestServeOptions|TestAccProviderProtocol6)$' \
+          ./cmd/terraform-provider-nutanix ./internal/provider
+
+  go:format:
+    desc: Format Go source
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - gofmt -w cmd internal
+
+  go:vet:
+    desc: Run Go static analysis
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - go vet ./...
+
+  go:test:race:
+    desc: Run Go tests with the race detector and container compiler
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - CGO_ENABLED=1 go test -race ./...
+
+  go:build:
+    desc: Build the protocol 6 provider binary
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - mkdir -p .cache/bin
+      - >-
+        CGO_ENABLED=0 go build -trimpath
+        -ldflags '-X main.version=0.0.0-dev'
+        -o .cache/bin/terraform-provider-nutanix
+        ./cmd/terraform-provider-nutanix
+      - go version -m .cache/bin/terraform-provider-nutanix
