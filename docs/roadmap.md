@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m0.3` — Canonical Beads graph and generated roadmap
+`ntnx-m0.4` — Nutanix Developer Portal artifact lock
