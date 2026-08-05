@@ -16,6 +16,8 @@ from podman.errors import APIError, PodmanError
 CONTAINER_HOST = "CONTAINER_HOST"
 ROOTFUL_SOCKET = Path("/run/podman/podman.sock")
 DEFAULT_API_TIMEOUT_SECONDS = 30
+EXEC_TERMINATE_GRACE_SECONDS = 2.0
+EXEC_API_GRACE_SECONDS = 5.0
 PODMAN_EXCEPTIONS = (APIError, PodmanError)
 
 
@@ -73,6 +75,10 @@ class PodmanAPIError(RuntimeError):
 
 class PodmanUnavailableError(PodmanAPIError):
     """PodmanUnavailableError reports an unavailable Podman transport."""
+
+
+class PodmanConfigurationError(PodmanAPIError):
+    """PodmanConfigurationError reports invalid Podman client configuration."""
 
 
 class PodmanSocketError(PodmanUnavailableError):
@@ -145,10 +151,10 @@ class PodmanAPI:
     clock: Clock
     sleep: Sleeper
 
-    def find_container(self) -> ContainerProtocol:
+    def find_container(self, *, timeout: float = DEFAULT_API_TIMEOUT_SECONDS) -> ContainerProtocol:
         """Return the one container matching exact Compose project and service labels."""
         try:
-            containers = self._list_containers(DEFAULT_API_TIMEOUT_SECONDS)
+            containers = self._list_containers(timeout)
         except PODMAN_EXCEPTIONS as error:
             raise PodmanUnavailableError("Podman container lookup failed") from error
         return self._select_container(containers)
@@ -204,10 +210,13 @@ class PodmanAPI:
         self,
         arguments: Sequence[str],
         *,
+        timeout: float,
         environment: Mapping[str, str] | None = None,
         workdir: str = "/workspace",
     ) -> ExecResult:
-        """Execute a noninteractive argument array and preserve its complete result."""
+        """Execute a deadline-wrapped argument array and preserve its complete result."""
+        if timeout <= 0:
+            raise ValueError("exec timeout must be positive")
         if isinstance(arguments, (str, bytes)):
             raise TypeError("exec requires an argument array, not a command string")
         normalized = list(arguments)
@@ -216,11 +225,22 @@ class PodmanAPI:
         if not all(isinstance(argument, str) for argument in normalized):
             raise TypeError("exec argument array must contain only strings")
 
-        container = self.find_container()
+        deadline = self.clock() + timeout
+        container = self.find_container(timeout=self._exec_remaining(deadline, timeout))
+        remaining = self._exec_remaining(deadline, timeout)
+        wrapped = [
+            "timeout",
+            "--signal=TERM",
+            f"--kill-after={EXEC_TERMINATE_GRACE_SECONDS:g}s",
+            "--",
+            f"{remaining:g}s",
+            *normalized,
+        ]
+        transport_budget = remaining + EXEC_TERMINATE_GRACE_SECONDS + EXEC_API_GRACE_SECONDS
         try:
-            with self._transport_timeout(DEFAULT_API_TIMEOUT_SECONDS):
+            with self._transport_timeout(transport_budget, cap_existing=False):
                 raw_result = container.exec_run(
-                    normalized,
+                    wrapped,
                     stdout=True,
                     stderr=True,
                     stdin=False,
@@ -265,10 +285,20 @@ class PodmanAPI:
             raise ContainerHealthTimeoutError(self.project, self.service, timeout)
         return remaining
 
+    def _exec_remaining(self, deadline: float, timeout: float) -> float:
+        remaining = deadline - self.clock()
+        if remaining <= 0:
+            raise PodmanAPIError(
+                f"Podman container command exceeded its {timeout:g} second deadline"
+            )
+        return remaining
+
     @contextmanager
-    def _transport_timeout(self, timeout: float) -> Iterator[None]:
+    def _transport_timeout(self, timeout: float, *, cap_existing: bool = True) -> Iterator[None]:
         previous = self.client.api.timeout
-        bounded = timeout if previous is None or previous <= 0 else min(previous, timeout)
+        bounded = timeout
+        if cap_existing and previous is not None and previous > 0:
+            bounded = min(previous, timeout)
         self.client.api.timeout = bounded
         try:
             yield
@@ -350,12 +380,17 @@ def connect(
     try:
         try:
             if client_factory is None:
-                client_context = cast(
-                    ClientProtocol,
-                    PodmanClient.from_env(
-                        environment=dict(env), timeout=DEFAULT_API_TIMEOUT_SECONDS
-                    ),
-                )
+                try:
+                    client_context = cast(
+                        ClientProtocol,
+                        PodmanClient.from_env(
+                            environment=dict(env), timeout=DEFAULT_API_TIMEOUT_SECONDS
+                        ),
+                    )
+                except ValueError as error:
+                    raise PodmanConfigurationError(
+                        "Podman client configuration is invalid"
+                    ) from error
             else:
                 client_context = client_factory()
             with client_context as client:

@@ -38,8 +38,16 @@ and mounts its Git common directory at `/git-common`. Explicit `GIT_DIR`,
 The development container does not receive the Podman socket. Lifecycle,
 readiness, status, and noninteractive commands are bounded host operations;
 only `./dev shell` uses an interactive host `podman exec`. GitHub tokens are
-removed from ordinary container operations and are injected only for
-`./dev beads dolt push` or `./dev beads dolt pull`, with output redaction.
+removed from every ordinary host subprocess and container operation. Known
+token values are redacted from captured output and are injected only for
+`./dev beads dolt push` or `./dev beads dolt pull`.
+
+Every noninteractive container command runs under the pinned GNU `timeout`
+binary without a shell. Task commands have a 60-minute limit, ordinary Beads
+commands 5 minutes, remote authentication setup 1 minute, and remote Beads
+commands 10 minutes. Expiry sends `TERM` to the command process group, then
+`KILL` after 2 seconds; the resulting exit code, stdout, and stderr are
+preserved.
 
 ## Project documents
 

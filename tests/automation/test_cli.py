@@ -17,6 +17,7 @@ from scripts.automation.podman_api import (
     ContainerNotFoundError,
     ExecResult,
     PodmanAPIError,
+    PodmanConfigurationError,
     PodmanSocketError,
 )
 from scripts.automation.process import CommandError, CommandResult
@@ -159,7 +160,11 @@ def test_up_uses_fixed_compose_command_metadata_and_waits_healthy(tmp_path: Path
     project = _project(tmp_path)
     runner = FakeRunner()
     api = FakeAPI()
-    host_env = {"PATH": "/bin", "GH_TOKEN": "must-not-reach-compose"}
+    host_env = {
+        "PATH": "/bin",
+        "GH_TOKEN": "must-not-reach-compose",
+        "GITHUB_TOKEN": "must-not-reach-either",
+    }
 
     exit_code, stdout, stderr, connector_calls = _main(
         cli, ("up",), project=project, runner=runner, api=api, env=host_env
@@ -185,6 +190,13 @@ def test_up_uses_fixed_compose_command_metadata_and_waits_healthy(tmp_path: Path
     assert compose_env["NUTANIX_GIT_COMMON_DIR"] == str(project.git_common_dir)
     assert compose_env["NUTANIX_GIT_DIR_RELATIVE"] == "worktrees/feature"
     assert "GH_TOKEN" not in compose_env
+    assert "GITHUB_TOKEN" not in compose_env
+    assert all("env" in kwargs for _, kwargs in runner.calls)
+    assert all(
+        "GH_TOKEN" not in cast(dict[str, str], kwargs["env"])
+        and "GITHUB_TOKEN" not in cast(dict[str, str], kwargs["env"])
+        for _, kwargs in runner.calls
+    )
     assert compose_call[1]["timeout"] == cli.COMPOSE_UP_TIMEOUT_SECONDS
     assert connector_calls == [("project-a", "dev")]
     assert api.wait_calls == [{"timeout": cli.HEALTH_TIMEOUT_SECONDS}]
@@ -240,7 +252,10 @@ def test_noninteractive_commands_wait_and_forward_exact_arguments_without_token(
     )
 
     assert api.wait_calls == [{"timeout": cli.HEALTH_TIMEOUT_SECONDS}]
-    assert api.exec_calls == [(expected, {"environment": {}})]
+    expected_timeout = (
+        cli.TASK_COMMAND_TIMEOUT_SECONDS if command == "task" else cli.BEADS_COMMAND_TIMEOUT_SECONDS
+    )
+    assert api.exec_calls == [(expected, {"environment": {}, "timeout": expected_timeout})]
     assert exit_code == 0
     assert stdout == b"exec stdout\n"
     assert stderr == b"exec stderr\n"
@@ -278,8 +293,20 @@ def test_remote_beads_uses_precedence_per_exec_and_redacts_streams(
 
     injected = {"GH_TOKEN": expected_token}
     assert api.exec_calls == [
-        (("gh", "auth", "setup-git"), {"environment": injected}),
-        (("bd", "dolt", "push", "--force-with-lease"), {"environment": injected}),
+        (
+            ("gh", "auth", "setup-git"),
+            {
+                "environment": injected,
+                "timeout": cli.REMOTE_SETUP_TIMEOUT_SECONDS,
+            },
+        ),
+        (
+            ("bd", "dolt", "push", "--force-with-lease"),
+            {
+                "environment": injected,
+                "timeout": cli.REMOTE_BEADS_TIMEOUT_SECONDS,
+            },
+        ),
     ]
     assert exit_code == 7
     assert secret not in stdout + stderr
@@ -304,7 +331,11 @@ def test_remote_beads_falls_back_to_bounded_host_gh_token(tmp_path: Path) -> Non
 
     gh_call = next(call for call in runner.calls if call[0] == ("gh", "auth", "token"))
     assert gh_call[1]["timeout"] == cli.GH_AUTH_TIMEOUT_SECONDS
-    assert api.exec_calls[0][1] == {"environment": {"GH_TOKEN": "token-from-gh"}}
+    assert gh_call[1]["env"] == {}
+    assert api.exec_calls[0][1] == {
+        "environment": {"GH_TOKEN": "token-from-gh"},
+        "timeout": cli.REMOTE_SETUP_TIMEOUT_SECONDS,
+    }
     assert exit_code == 0
 
 
@@ -374,7 +405,7 @@ def test_status_uses_api_and_only_status_has_bounded_ps_fallback(tmp_path: Path)
                 "--format",
                 "{{.Names}} {{.Status}}",
             ),
-            {"timeout": cli.STATUS_TIMEOUT_SECONDS},
+            {"env": {}, "timeout": cli.STATUS_TIMEOUT_SECONDS},
         )
     ]
 
@@ -403,7 +434,10 @@ def test_status_uses_bounded_ps_fallback_for_api_unavailability(tmp_path: Path) 
 
     assert exit_code == 0
     assert runner.calls[0][0][:2] == ("podman", "ps")
-    assert runner.calls[0][1] == {"timeout": cli.STATUS_TIMEOUT_SECONDS}
+    assert runner.calls[0][1] == {
+        "env": {},
+        "timeout": cli.STATUS_TIMEOUT_SECONDS,
+    }
 
 
 @pytest.mark.parametrize("error_type", [ContainerNotFoundError, AmbiguousContainerError])
@@ -519,6 +553,93 @@ def test_exec_nonzero_exit_preserves_streams_and_exit_code(tmp_path: Path) -> No
     assert exit_code == 23
     assert stdout == b"kept stdout\n"
     assert stderr == b"kept stderr\n"
+
+
+def test_ordinary_command_results_redact_all_known_tokens(tmp_path: Path) -> None:
+    cli = _cli()
+    runner = FakeRunner()
+    runner.result = CommandResult(
+        (),
+        0,
+        "stdout primary-sentinel secondary-sentinel\n",
+        "stderr secondary-sentinel primary-sentinel\n",
+    )
+
+    exit_code, stdout, stderr, _ = _main(
+        cli,
+        ("down",),
+        project=_project(tmp_path),
+        runner=runner,
+        api=FakeAPI(),
+        env={
+            "PATH": "/bin",
+            "GH_TOKEN": "primary-sentinel",
+            "GITHUB_TOKEN": "secondary-sentinel",
+        },
+    )
+
+    assert exit_code == 0
+    assert b"primary-sentinel" not in stdout + stderr
+    assert b"secondary-sentinel" not in stdout + stderr
+    assert (stdout + stderr).count(b"[REDACTED]") == 4
+
+
+def test_command_errors_redact_all_known_tokens() -> None:
+    cli = _cli()
+    stdout = io.BytesIO()
+    stderr = io.BytesIO()
+
+    def failed_project() -> object:
+        raise CommandError(
+            CommandResult(
+                ("git", "rev-parse"),
+                19,
+                "primary-sentinel\n",
+                "secondary-sentinel\n",
+            )
+        )
+
+    exit_code = cli.main(
+        ("status",),
+        project_factory=failed_project,
+        env={
+            "GH_TOKEN": "primary-sentinel",
+            "GITHUB_TOKEN": "secondary-sentinel",
+        },
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert exit_code == 19
+    assert b"primary-sentinel" not in stdout.getvalue() + stderr.getvalue()
+    assert b"secondary-sentinel" not in stdout.getvalue() + stderr.getvalue()
+    assert stdout.getvalue() == b"[REDACTED]\n"
+    assert stderr.getvalue() == b"[REDACTED]\n"
+
+
+def test_status_configuration_error_does_not_fallback_or_traceback(tmp_path: Path) -> None:
+    cli = _cli()
+    api = FakeAPI()
+
+    @contextmanager
+    def invalid(_: str, __: str) -> Iterator[FakeAPI]:
+        raise PodmanConfigurationError("Podman client configuration is invalid")
+        yield api
+
+    runner = FakeRunner()
+    exit_code, stdout, stderr, _ = _main(
+        cli,
+        ("status",),
+        project=_project(tmp_path),
+        runner=runner,
+        api=api,
+        connector=invalid,
+    )
+
+    assert exit_code == 1
+    assert stdout == b""
+    assert stderr == b"error: Podman client configuration is invalid\n"
+    assert runner.calls == []
 
 
 def test_project_discovery_error_is_reported_without_traceback() -> None:

@@ -37,10 +37,21 @@ common directory. This preserves real Git behavior in both primary and linked
 worktrees without mounting a Podman control socket.
 
 Remove `GH_TOKEN` and `GITHUB_TOKEN` from ordinary Compose, shell, Task, and
-Beads environments. Only remote `bd dolt push` and `bd dolt pull` operations
-may receive a token, with nonempty precedence `GH_TOKEN`, `GITHUB_TOKEN`, then
-a bounded host `gh auth token` lookup. Inject the token per exec, configure Git
-authentication in the container first, and redact it from both output streams.
+Beads environments and every ordinary host subprocess environment. Redact both
+known nonempty token values from captured host-command output. Only remote
+`bd dolt push` and `bd dolt pull` operations may receive a token, with nonempty
+precedence `GH_TOKEN`, `GITHUB_TOKEN`, then a bounded, scrubbed host
+`gh auth token` lookup. Inject the token per exec, configure Git authentication
+in the container first, and redact it from both output streams.
+
+Wrap every noninteractive container command with pinned GNU `timeout`, using a
+direct argument array and no shell. The wall-clock limits are 60 minutes for
+Task, 5 minutes for ordinary Beads, 1 minute for remote Git authentication
+setup, and 10 minutes for remote Beads. The wrapper sends `TERM` to the command
+process group and `KILL` after a 2-second grace period. Podman transport calls
+receive the remaining command deadline plus termination and API grace because
+the transport timeout alone is not a total command lifetime. Preserve the
+wrapped command's exit code and demultiplexed output.
 
 ## Consequences
 

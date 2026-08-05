@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
+import os
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,13 @@ PROJECT_PREFIX = "nutanix-provider"
 PROJECT_HASH_LENGTH = 12
 
 Runner = Callable[..., CommandResult]
+
+
+def _host_git_environment(env: Mapping[str, str]) -> dict[str, str]:
+    sanitized = dict(env)
+    sanitized.pop("GH_TOKEN", None)
+    sanitized.pop("GITHUB_TOKEN", None)
+    return sanitized
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,9 +47,15 @@ def project_name(git_common_dir: Path, worktree: Path) -> str:
     return f"{PROJECT_PREFIX}-{suffix}"
 
 
-def discover_project(start: Path | None = None, *, runner: Runner = run) -> Project:
+def discover_project(
+    start: Path | None = None,
+    *,
+    runner: Runner = run,
+    env: Mapping[str, str] = os.environ,
+) -> Project:
     """Resolve worktree paths and a stable Compose project identity."""
     starting_path = (start or Path.cwd()).expanduser().resolve()
+    git_env = _host_git_environment(env)
     root_arguments = (
         "git",
         "-C",
@@ -50,7 +64,7 @@ def discover_project(start: Path | None = None, *, runner: Runner = run) -> Proj
         "--path-format=absolute",
         "--show-toplevel",
     )
-    root = Path(runner(root_arguments).stdout.strip()).expanduser().resolve()
+    root = Path(runner(root_arguments, env=git_env).stdout.strip()).expanduser().resolve()
     common_arguments = (
         "git",
         "-C",
@@ -59,7 +73,9 @@ def discover_project(start: Path | None = None, *, runner: Runner = run) -> Proj
         "--path-format=absolute",
         "--git-common-dir",
     )
-    git_common_dir = Path(runner(common_arguments).stdout.strip()).expanduser().resolve()
+    git_common_dir = (
+        Path(runner(common_arguments, env=git_env).stdout.strip()).expanduser().resolve()
+    )
     git_dir_arguments = (
         "git",
         "-C",
@@ -68,7 +84,7 @@ def discover_project(start: Path | None = None, *, runner: Runner = run) -> Proj
         "--path-format=absolute",
         "--git-dir",
     )
-    git_dir = Path(runner(git_dir_arguments).stdout.strip()).expanduser().resolve()
+    git_dir = Path(runner(git_dir_arguments, env=git_env).stdout.strip()).expanduser().resolve()
     try:
         git_dir_relative = git_dir.relative_to(git_common_dir)
     except ValueError:

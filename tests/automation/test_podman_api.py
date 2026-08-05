@@ -4,6 +4,7 @@ import ast
 import importlib
 import math
 import os
+import subprocess
 import time
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
@@ -29,6 +30,7 @@ class FakeContainer:
         self.state = state
         self.transport = transport
         self.reload_timeouts: list[float | None] = []
+        self.exec_timeouts: list[float | None] = []
         self.exec_calls: list[tuple[list[str], dict[str, object]]] = []
         self.exec_result: tuple[int, tuple[bytes | None, bytes | None]] = (
             0,
@@ -51,6 +53,8 @@ class FakeContainer:
         return None
 
     def exec_run(self, arguments: list[str], **kwargs: object) -> object:
+        if self.transport is not None:
+            self.exec_timeouts.append(self.transport.timeout)
         self.exec_calls.append((arguments, kwargs))
         return self.exec_result
 
@@ -600,18 +604,65 @@ def test_default_factory_receives_selected_environment_and_finite_timeout(
     assert timeout > 0
 
 
+def test_malformed_container_host_is_typed_configuration_error(
+    podman_api: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = ValueError("unsupported URL scheme")
+    configuration_type = getattr(podman_api, "PodmanConfigurationError", None)
+    assert isinstance(configuration_type, type)
+    assert issubclass(configuration_type, podman_api.PodmanAPIError)
+    assert not issubclass(configuration_type, podman_api.PodmanUnavailableError)
+    env = {"CONTAINER_HOST": "malformed://host"}
+
+    def from_env(**_: object) -> object:
+        raise original
+
+    monkeypatch.setattr(podman_api.PodmanClient, "from_env", from_env)
+
+    with pytest.raises(configuration_type) as raised:
+        with podman_api.connect("project-a", "dev", env=env):
+            pass
+
+    assert raised.value.__cause__ is original
+    assert env == {"CONTAINER_HOST": "malformed://host"}
+
+
+def test_caller_value_error_is_not_misclassified_as_configuration(
+    podman_api: ModuleType,
+) -> None:
+    client = FakeClient(FakeContainers())
+
+    with pytest.raises(ValueError, match="caller failure"):
+        with podman_api.connect(
+            "project-a",
+            "dev",
+            client_factory=lambda: client,
+            env={"CONTAINER_HOST": "unix:///selected.sock"},
+        ):
+            raise ValueError("caller failure")
+
+
 def test_exec_is_noninteractive_demuxed_and_preserves_result(
     podman_api: ModuleType,
 ) -> None:
-    container = FakeContainer()
+    transport = FakeTransport(30.0)
+    clock = FakeClock()
+    container = FakeContainer(transport=transport)
     container.exec_result = (17, (b"kept stdout", b"kept stderr"))
     environment = {"GH_TOKEN": "per-exec-only"}
+    containers = FakeContainers((container,), transport=transport)
 
-    with _connect(podman_api, FakeClient(FakeContainers((container,)))) as api:
+    with _connect(
+        podman_api,
+        FakeClient(containers, transport=transport),
+        clock=clock,
+        sleep=clock.sleep,
+    ) as api:
         result = api.exec(
             ("task", "python:test", "--", "tests/automation"),
             environment=environment,
             workdir="/workspace",
+            timeout=10.0,
         )
 
     assert result.exit_code == 17
@@ -619,7 +670,17 @@ def test_exec_is_noninteractive_demuxed_and_preserves_result(
     assert result.stderr == b"kept stderr"
     assert container.exec_calls == [
         (
-            ["task", "python:test", "--", "tests/automation"],
+            [
+                "timeout",
+                "--signal=TERM",
+                f"--kill-after={podman_api.EXEC_TERMINATE_GRACE_SECONDS:g}s",
+                "--",
+                "10s",
+                "task",
+                "python:test",
+                "--",
+                "tests/automation",
+            ],
             {
                 "stdout": True,
                 "stderr": True,
@@ -635,6 +696,15 @@ def test_exec_is_noninteractive_demuxed_and_preserves_result(
             },
         )
     ]
+    assert container.exec_calls[0][0][-4:] == [
+        "task",
+        "python:test",
+        "--",
+        "tests/automation",
+    ]
+    assert container.exec_timeouts == [
+        10.0 + podman_api.EXEC_TERMINATE_GRACE_SECONDS + podman_api.EXEC_API_GRACE_SECONDS
+    ]
 
 
 def test_exec_transport_error_is_api_unavailability(podman_api: ModuleType) -> None:
@@ -649,7 +719,7 @@ def test_exec_transport_error_is_api_unavailability(podman_api: ModuleType) -> N
 
     with _connect(podman_api, FakeClient(FakeContainers((container,)))) as api:
         with pytest.raises(unavailable_type) as raised:
-            api.exec(("task", "versions"))
+            api.exec(("task", "versions"), timeout=1.0)
 
     assert raised.value.__cause__ is original
 
@@ -657,7 +727,102 @@ def test_exec_transport_error_is_api_unavailability(podman_api: ModuleType) -> N
 def test_exec_rejects_a_shell_command_string(podman_api: ModuleType) -> None:
     with _connect(podman_api, FakeClient(FakeContainers((FakeContainer(),)))) as api:
         with pytest.raises(TypeError, match="argument array"):
-            api.exec("task python:test")
+            api.exec("task python:test", timeout=1.0)
+
+
+@pytest.mark.parametrize("timeout", [0.0, -1.0])
+def test_exec_rejects_nonpositive_total_timeout(podman_api: ModuleType, timeout: float) -> None:
+    with _connect(podman_api, FakeClient(FakeContainers((FakeContainer(),)))) as api:
+        with pytest.raises(ValueError, match="timeout must be positive"):
+            api.exec(("task", "versions"), timeout=timeout)
+
+
+def test_exec_lookup_overhead_consumes_total_deadline(podman_api: ModuleType) -> None:
+    clock = FakeClock()
+    transport = FakeTransport(30.0)
+    container = FakeContainer(transport=transport)
+
+    class SlowContainers(FakeContainers):
+        def list(self, **kwargs: object) -> Sequence[FakeContainer]:
+            clock.sleep(2.0)
+            return super().list(**kwargs)
+
+    containers = SlowContainers((container,), transport=transport)
+    client = FakeClient(containers, transport=transport)
+
+    with _connect(
+        podman_api,
+        client,
+        clock=clock,
+        sleep=clock.sleep,
+    ) as api:
+        api.exec(("task", "versions"), timeout=5.0)
+
+    assert container.exec_calls[0][0][:5] == [
+        "timeout",
+        "--signal=TERM",
+        f"--kill-after={podman_api.EXEC_TERMINATE_GRACE_SECONDS:g}s",
+        "--",
+        "3s",
+    ]
+    assert container.exec_calls[0][0][-2:] == ["task", "versions"]
+    assert container.exec_timeouts == [
+        3.0 + podman_api.EXEC_TERMINATE_GRACE_SECONDS + podman_api.EXEC_API_GRACE_SECONDS
+    ]
+
+
+def test_exec_transport_budget_can_exceed_default_api_timeout(
+    podman_api: ModuleType,
+) -> None:
+    transport = FakeTransport(30.0)
+    clock = FakeClock()
+    container = FakeContainer(transport=transport)
+    containers = FakeContainers((container,), transport=transport)
+
+    with _connect(
+        podman_api,
+        FakeClient(containers, transport=transport),
+        clock=clock,
+        sleep=clock.sleep,
+    ) as api:
+        api.exec(("task", "versions"), timeout=40.0)
+
+    assert container.exec_timeouts == [
+        40.0 + podman_api.EXEC_TERMINATE_GRACE_SECONDS + podman_api.EXEC_API_GRACE_SECONDS
+    ]
+    assert transport.timeout == 30.0
+
+
+def test_real_timeout_wrapper_kills_keepalive_process_group(
+    podman_api: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(podman_api, "EXEC_TERMINATE_GRACE_SECONDS", 0.2)
+    container = FakeContainer()
+    script = """\
+import os
+import signal
+import time
+
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+print(os.getpid(), flush=True)
+while True:
+    print("tick", flush=True)
+    time.sleep(0.05)
+"""
+
+    with _connect(podman_api, FakeClient(FakeContainers((container,)))) as api:
+        api.exec(("python", "-c", script), timeout=0.3)
+
+    wrapped = container.exec_calls[0][0]
+    started = time.monotonic()
+    completed = subprocess.run(wrapped, capture_output=True, check=False, timeout=2.0)
+    elapsed = time.monotonic() - started
+    child_pid = int(completed.stdout.splitlines()[0])
+
+    assert completed.returncode in {124, 137, -9}
+    assert completed.stdout.count(b"tick") >= 2
+    assert 0.25 <= elapsed < 1.5
+    assert not Path(f"/proc/{child_pid}").exists()
 
 
 def test_module_has_no_subprocess_or_cli_fallback(podman_api: ModuleType) -> None:

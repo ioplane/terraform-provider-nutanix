@@ -28,6 +28,10 @@ HEALTH_TIMEOUT_SECONDS = 180.0
 STATUS_TIMEOUT_SECONDS = 15.0
 GH_AUTH_TIMEOUT_SECONDS = 15.0
 GIT_METADATA_TIMEOUT_SECONDS = 15.0
+TASK_COMMAND_TIMEOUT_SECONDS = 3600.0
+BEADS_COMMAND_TIMEOUT_SECONDS = 300.0
+REMOTE_SETUP_TIMEOUT_SECONDS = 60.0
+REMOTE_BEADS_TIMEOUT_SECONDS = 600.0
 REDACTED = b"[REDACTED]"
 
 
@@ -72,9 +76,32 @@ def _write(stream: BinaryIO, value: bytes) -> None:
         stream.write(value)
 
 
-def _emit_command(result: CommandResult, stdout: BinaryIO, stderr: BinaryIO) -> None:
-    _write(stdout, result.stdout.encode())
-    _write(stderr, result.stderr.encode())
+def _known_github_tokens(env: Mapping[str, str]) -> tuple[bytes, ...]:
+    values: set[bytes] = set()
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        raw = env.get(name, "")
+        stripped = raw.strip()
+        if stripped:
+            values.add(raw.encode())
+            values.add(stripped.encode())
+    return tuple(sorted(values, key=len, reverse=True))
+
+
+def _redact(value: bytes, secrets: Sequence[bytes]) -> bytes:
+    redacted = value
+    for secret in secrets:
+        redacted = redacted.replace(secret, REDACTED)
+    return redacted
+
+
+def _emit_command(
+    result: CommandResult,
+    stdout: BinaryIO,
+    stderr: BinaryIO,
+    secrets: Sequence[bytes],
+) -> None:
+    _write(stdout, _redact(result.stdout.encode(), secrets))
+    _write(stderr, _redact(result.stderr.encode(), secrets))
 
 
 def _emit_exec(
@@ -82,16 +109,10 @@ def _emit_exec(
     stdout: BinaryIO,
     stderr: BinaryIO,
     *,
-    token: str | None = None,
+    secrets: Sequence[bytes] = (),
 ) -> None:
-    output = result.stdout
-    errors = result.stderr
-    if token is not None:
-        secret = token.encode()
-        output = output.replace(secret, REDACTED)
-        errors = errors.replace(secret, REDACTED)
-    _write(stdout, output)
-    _write(stderr, errors)
+    _write(stdout, _redact(result.stdout, secrets))
+    _write(stderr, _redact(result.stderr, secrets))
 
 
 class Launcher:
@@ -112,6 +133,8 @@ class Launcher:
         self.runner = runner
         self.connector = connector
         self.env = env
+        self.host_env = _without_github_tokens(env)
+        self.secrets = _known_github_tokens(env)
         self.stdout = stdout
         self.stderr = stderr
         self.execvpe = execvpe
@@ -124,7 +147,7 @@ class Launcher:
             env=self._compose_environment(),
             timeout=COMPOSE_UP_TIMEOUT_SECONDS,
         )
-        _emit_command(result, self.stdout, self.stderr)
+        _emit_command(result, self.stdout, self.stderr, self.secrets)
         with self.connector(self.project.name, SERVICE) as api:
             api.wait_until_healthy(timeout=HEALTH_TIMEOUT_SECONDS)
         return 0
@@ -137,7 +160,7 @@ class Launcher:
             env=self._compose_environment(),
             timeout=COMPOSE_DOWN_TIMEOUT_SECONDS,
         )
-        _emit_command(result, self.stdout, self.stderr)
+        _emit_command(result, self.stdout, self.stderr, self.secrets)
         return 0
 
     def status(self) -> int:
@@ -159,9 +182,10 @@ class Launcher:
                     "--format",
                     "{{.Names}} {{.Status}}",
                 ),
+                env=self.host_env,
                 timeout=STATUS_TIMEOUT_SECONDS,
             )
-            _emit_command(result, self.stdout, self.stderr)
+            _emit_command(result, self.stdout, self.stderr, self.secrets)
             return 0
 
     def shell(self) -> int:
@@ -182,31 +206,43 @@ class Launcher:
 
     def task(self, arguments: Sequence[str]) -> int:
         """Run an exact Task argument vector through the Podman API."""
-        return self._exec(("task", *self._required_arguments("task", arguments)))
+        return self._exec(
+            ("task", *self._required_arguments("task", arguments)),
+            timeout=TASK_COMMAND_TIMEOUT_SECONDS,
+        )
 
     def beads(self, arguments: Sequence[str]) -> int:
         """Run bd, injecting a short-lived token only for remote Dolt operations."""
         normalized = self._required_arguments("beads", arguments)
         if tuple(normalized[:2]) not in {("dolt", "push"), ("dolt", "pull")}:
-            return self._exec(("bd", *normalized))
+            return self._exec(("bd", *normalized), timeout=BEADS_COMMAND_TIMEOUT_SECONDS)
 
         token = self._github_token()
         environment = {"GH_TOKEN": token}
+        secrets = (*self.secrets, token.encode())
         with self.connector(self.project.name, SERVICE) as api:
             api.wait_until_healthy(timeout=HEALTH_TIMEOUT_SECONDS)
-            setup = api.exec(("gh", "auth", "setup-git"), environment=environment)
-            _emit_exec(setup, self.stdout, self.stderr, token=token)
+            setup = api.exec(
+                ("gh", "auth", "setup-git"),
+                environment=environment,
+                timeout=REMOTE_SETUP_TIMEOUT_SECONDS,
+            )
+            _emit_exec(setup, self.stdout, self.stderr, secrets=secrets)
             if setup.exit_code != 0:
                 return setup.exit_code
-            result = api.exec(("bd", *normalized), environment=environment)
-        _emit_exec(result, self.stdout, self.stderr, token=token)
+            result = api.exec(
+                ("bd", *normalized),
+                environment=environment,
+                timeout=REMOTE_BEADS_TIMEOUT_SECONDS,
+            )
+        _emit_exec(result, self.stdout, self.stderr, secrets=secrets)
         return result.exit_code
 
-    def _exec(self, arguments: Sequence[str]) -> int:
+    def _exec(self, arguments: Sequence[str], *, timeout: float) -> int:
         with self.connector(self.project.name, SERVICE) as api:
             api.wait_until_healthy(timeout=HEALTH_TIMEOUT_SECONDS)
-            result = api.exec(arguments, environment={})
-        _emit_exec(result, self.stdout, self.stderr)
+            result = api.exec(arguments, environment={}, timeout=timeout)
+        _emit_exec(result, self.stdout, self.stderr, secrets=self.secrets)
         return result.exit_code
 
     def _required_arguments(self, command: str, arguments: Sequence[str]) -> list[str]:
@@ -230,6 +266,7 @@ class Launcher:
             raise LauncherError("VERSION is empty")
         revision = self.runner(
             ("git", "-C", str(self.project.root), "rev-parse", "HEAD"),
+            env=self.host_env,
             timeout=GIT_METADATA_TIMEOUT_SECONDS,
         ).stdout.strip()
         created = self.runner(
@@ -242,6 +279,7 @@ class Launcher:
                 "--format=%cI",
                 "HEAD",
             ),
+            env=self.host_env,
             timeout=GIT_METADATA_TIMEOUT_SECONDS,
         ).stdout.strip()
         if not revision or not created:
@@ -267,7 +305,11 @@ class Launcher:
 
         failed = False
         try:
-            result = self.runner(("gh", "auth", "token"), timeout=GH_AUTH_TIMEOUT_SECONDS)
+            result = self.runner(
+                ("gh", "auth", "token"),
+                env=self.host_env,
+                timeout=GH_AUTH_TIMEOUT_SECONDS,
+            )
         except CommandError:
             failed = True
             result = None
@@ -282,7 +324,7 @@ class Launcher:
 def main(
     argv: Sequence[str] | None = None,
     *,
-    project_factory: ProjectFactory = discover_project,
+    project_factory: ProjectFactory | None = None,
     runner: Runner = run,
     connector: Connector = connect,
     env: Mapping[str, str] | None = None,
@@ -298,12 +340,19 @@ def main(
         arguments = build_parser().parse_args(raw_arguments)
     output = stdout or cast(BinaryIO, sys.stdout.buffer)
     errors = stderr or cast(BinaryIO, sys.stderr.buffer)
+    selected_env = os.environ if env is None else env
+    secrets = _known_github_tokens(selected_env)
     try:
+        project = (
+            discover_project(runner=runner, env=selected_env)
+            if project_factory is None
+            else project_factory()
+        )
         launcher = Launcher(
-            project_factory(),
+            project,
             runner=runner,
             connector=connector,
-            env=os.environ if env is None else env,
+            env=selected_env,
             stdout=output,
             stderr=errors,
             execvpe=execvpe,
@@ -322,8 +371,8 @@ def main(
             return launcher.beads(arguments.arguments)
         raise LauncherError(f"unknown command: {arguments.command}")
     except CommandError as error:
-        _write(output, error.stdout.encode())
-        _write(errors, error.stderr.encode())
+        _write(output, _redact(error.stdout.encode(), secrets))
+        _write(errors, _redact(error.stderr.encode(), secrets))
         return error.returncode or 1
     except (LauncherError, PodmanAPIError, ProjectError, OSError) as error:
         _write(errors, f"error: {error}\n".encode())

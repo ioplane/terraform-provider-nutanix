@@ -25,10 +25,10 @@ def test_discover_project_resolves_root_and_common_directory(tmp_path: Path) -> 
     root = tmp_path / "checkout"
     common_dir = tmp_path / "repository.git"
     git_dir = common_dir / "worktrees" / "feature"
-    calls: list[tuple[str, ...]] = []
+    calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
 
-    def fake_run(arguments: tuple[str, ...], **_: object) -> CommandResult:
-        calls.append(arguments)
+    def fake_run(arguments: tuple[str, ...], **kwargs: object) -> CommandResult:
+        calls.append((arguments, kwargs))
         if "--show-toplevel" in arguments:
             output = root
         elif "--git-common-dir" in arguments:
@@ -37,14 +37,18 @@ def test_discover_project_resolves_root_and_common_directory(tmp_path: Path) -> 
             output = git_dir
         return CommandResult(arguments=arguments, returncode=0, stdout=f"{output}\n", stderr="")
 
-    project = discover_project(start, runner=fake_run)
+    project = discover_project(
+        start,
+        runner=fake_run,
+        env={"PATH": "/bin", "GH_TOKEN": "primary", "GITHUB_TOKEN": "secondary"},
+    )
 
     assert project.root == root.resolve()
     assert project.git_common_dir == common_dir.resolve()
     assert project.git_dir == git_dir.resolve()
     assert project.git_dir_relative == Path("worktrees/feature")
     assert project.name == project_name(common_dir, root)
-    assert calls == [
+    assert [arguments for arguments, _ in calls] == [
         (
             "git",
             "-C",
@@ -69,6 +73,11 @@ def test_discover_project_resolves_root_and_common_directory(tmp_path: Path) -> 
             "--path-format=absolute",
             "--git-dir",
         ),
+    ]
+    assert [kwargs for _, kwargs in calls] == [
+        {"env": {"PATH": "/bin"}},
+        {"env": {"PATH": "/bin"}},
+        {"env": {"PATH": "/bin"}},
     ]
 
 
