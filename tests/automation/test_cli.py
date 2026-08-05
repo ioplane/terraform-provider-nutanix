@@ -599,6 +599,54 @@ def test_remote_beads_uses_precedence_per_exec_and_redacts_streams(
     assert ("gh", "auth", "token") not in [call for call, _ in runner.calls]
 
 
+def test_remote_beads_bootstrap_uses_sanitized_git_environment(tmp_path: Path) -> None:
+    cli = _cli()
+    api = FakeAPI()
+    project = _project(tmp_path)
+    _write_beads_marker(project)
+
+    exit_code, _, _, _ = _main(
+        cli,
+        ("beads", "bootstrap", "--non-interactive"),
+        project=project,
+        runner=FakeRunner(),
+        api=api,
+        env={"GH_TOKEN": "bootstrap-token"},
+    )
+
+    assert api.exec_calls == [
+        (
+            ("gh", "auth", "setup-git"),
+            {
+                "environment": {"GH_TOKEN": "bootstrap-token"},
+                "timeout": cli.REMOTE_SETUP_TIMEOUT_SECONDS,
+            },
+        ),
+        (
+            (
+                "/usr/bin/env",
+                "-u",
+                "GIT_COMMON_DIR",
+                "-u",
+                "GIT_DIR",
+                "-u",
+                "GIT_WORK_TREE",
+                "bd",
+                "bootstrap",
+                "--non-interactive",
+            ),
+            {
+                "environment": {
+                    "BEADS_DIR": "/workspace/.beads",
+                    "GH_TOKEN": "bootstrap-token",
+                },
+                "timeout": cli.REMOTE_BEADS_TIMEOUT_SECONDS,
+            },
+        ),
+    ]
+    assert exit_code == 0
+
+
 def test_remote_beads_falls_back_to_bounded_host_gh_token(tmp_path: Path) -> None:
     cli = _cli()
     runner = FakeRunner()

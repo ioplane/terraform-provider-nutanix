@@ -232,7 +232,11 @@ class Launcher:
         normalized = self._required_arguments("beads", arguments)
         if normalized[0] != "init":
             self._require_local_beads()
-        if tuple(normalized[:2]) not in {("dolt", "push"), ("dolt", "pull")}:
+        remote_operation = normalized[0] == "bootstrap" or tuple(normalized[:2]) in {
+            ("dolt", "push"),
+            ("dolt", "pull"),
+        }
+        if not remote_operation:
             return self._exec(
                 ("bd", *normalized),
                 environment={"BEADS_DIR": BEADS_DIR},
