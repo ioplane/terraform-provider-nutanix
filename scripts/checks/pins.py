@@ -191,6 +191,32 @@ done
 cat "${service_log}"
 exit 1
 """
+EXPECTED_CI_STEPS: list[dict[str, object]] = [
+    {
+        "name": "Check out repository",
+        "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "with": {"persist-credentials": "false"},
+    },
+    {
+        "name": "Install pinned uv launcher",
+        "uses": "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9",
+        "with": {"version": "0.12.1", "enable-cache": "false"},
+    },
+    {"name": "Verify host Podman", "run": "podman version"},
+    {
+        "name": "Start private Podman API service",
+        "shell": "bash",
+        "run": EXPECTED_PODMAN_SERVICE_SCRIPT,
+    },
+    {"name": "Build development container", "run": "./dev up"},
+    {"name": "Run complete foundation gate", "run": "./dev task all"},
+    {
+        "name": "Report container status on failure",
+        "if": "failure()",
+        "continue-on-error": "true",
+        "run": "./dev status",
+    },
+]
 EXPECTED_DEPENDABOT_DIRECTORIES = {
     "docker": "/deployments/containers",
     "github-actions": "/",
@@ -485,6 +511,7 @@ def _workflow_diagnostics(root: Path, arguments: dict[str, str]) -> list[str]:
         text = path.read_text()
         for reference in _ACTION.findall(text):
             if reference.startswith("./"):
+                diagnostics.append(f"{relative}: local action reference is forbidden: {reference}")
                 continue
             if not _ACTION_SHA.fullmatch(reference):
                 diagnostics.append(f"{relative}: floating action reference {reference}")
@@ -507,6 +534,8 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
         return ["CI workflow must be an object"]
 
     diagnostics: list[str] = []
+    if set(document) != {"name", "on", "permissions", "concurrency", "jobs"}:
+        diagnostics.append("CI workflow key set differs")
     if "defaults" in document:
         diagnostics.append("CI workflow execution defaults are forbidden")
     if "env" in document:
@@ -525,6 +554,8 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
         diagnostics.append("CI concurrency group differs")
 
     jobs = document.get("jobs")
+    if isinstance(jobs, dict) and set(jobs) != {"foundation"}:
+        diagnostics.append("CI job set differs")
     foundation = jobs.get("foundation") if isinstance(jobs, dict) else None
     if not isinstance(foundation, dict):
         diagnostics.append("CI foundation job is missing")
@@ -533,6 +564,10 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
         diagnostics.append("CI foundation check name differs")
     if foundation.get("runs-on") != "ubuntu-24.04":
         diagnostics.append("CI foundation runner must be ubuntu-24.04")
+    if set(foundation) != {"name", "runs-on", "timeout-minutes", "steps"}:
+        diagnostics.append("CI foundation job model differs")
+    if foundation.get("timeout-minutes") != "90":
+        diagnostics.append("CI foundation timeout differs")
     if "permissions" in foundation:
         diagnostics.append("CI job-level permissions are forbidden")
     if "if" in foundation:
@@ -548,6 +583,8 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
     if not isinstance(steps, list) or not all(isinstance(step, dict) for step in steps):
         diagnostics.append("CI foundation steps must be an array of objects")
         return diagnostics
+    if steps != EXPECTED_CI_STEPS:
+        diagnostics.append("CI foundation ordered step model differs")
 
     observed_actions: dict[str, list[str]] = {}
     for step in steps:

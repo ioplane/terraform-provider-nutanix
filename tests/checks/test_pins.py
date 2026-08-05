@@ -94,6 +94,7 @@ def valid_pin_repository(root: Path) -> None:
         "  foundation:\n"
         "    name: Foundation\n"
         "    runs-on: ubuntu-24.04\n"
+        "    timeout-minutes: 90\n"
         "    steps:\n"
         "      - name: Check out repository\n"
         "        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n"
@@ -104,11 +105,18 @@ def valid_pin_repository(root: Path) -> None:
         "        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0\n"
         "        with:\n"
         "          version: 0.12.1\n"
-        "      - run: podman version\n"
+        "          enable-cache: false\n"
+        "      - name: Verify host Podman\n"
+        "        run: podman version\n"
         "      - name: Start private Podman API service\n"
-        "        run: |\n" + service_script + "      - run: ./dev up\n"
-        "      - run: ./dev task all\n"
-        "      - if: failure()\n"
+        "        shell: bash\n"
+        "        run: |\n" + service_script + "      - name: Build development container\n"
+        "        run: ./dev up\n"
+        "      - name: Run complete foundation gate\n"
+        "        run: ./dev task all\n"
+        "      - name: Report container status on failure\n"
+        "        if: failure()\n"
+        "        continue-on-error: true\n"
         "        run: ./dev status\n"
     )
 
@@ -424,8 +432,11 @@ def test_required_ci_gate_cannot_be_conditionally_skipped_or_ignored(tmp_path: P
     workflow = tmp_path / ".github" / "workflows" / "ci.yml"
     content = workflow.read_text()
     content = content.replace(
-        "      - run: ./dev task all\n",
-        "      - if: false\n        continue-on-error: true\n        run: ./dev task all\n",
+        "      - name: Run complete foundation gate\n        run: ./dev task all\n",
+        "      - name: Run complete foundation gate\n"
+        "        if: false\n"
+        "        continue-on-error: true\n"
+        "        run: ./dev task all\n",
     )
     workflow.write_text(content)
 
@@ -448,8 +459,9 @@ def test_required_ci_gate_rejects_shell_and_environment_overrides(tmp_path: Path
         "  foundation:\n    defaults:\n      run:\n        shell: bash -c 'true' -- {0}\n",
     )
     content = content.replace(
-        "      - run: ./dev task all\n",
-        "      - shell: bash -c 'true' -- {0}\n"
+        "      - name: Run complete foundation gate\n        run: ./dev task all\n",
+        "      - name: Run complete foundation gate\n"
+        "        shell: bash -c 'true' -- {0}\n"
         "        env:\n"
         "          BASH_ENV: bypass.sh\n"
         "        run: ./dev task all\n",
@@ -461,6 +473,52 @@ def test_required_ci_gate_rejects_shell_and_environment_overrides(tmp_path: Path
     assert "CI workflow execution defaults are forbidden" in diagnostics
     assert "CI foundation job execution defaults are forbidden" in diagnostics
     assert "CI complete foundation gate execution overrides are forbidden" in diagnostics
+
+
+def test_ci_rejects_local_actions_and_pre_gate_execution_overrides(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    content = workflow.read_text()
+    content = content.replace(
+        "      - name: Build development container\n        run: ./dev up\n",
+        "      - name: Mutate launcher\n"
+        "        uses: ./ci/bypass\n"
+        "      - name: Build development container\n"
+        "        shell: bash -c 'true' -- {0}\n"
+        "        env:\n"
+        "          BASH_ENV: bypass.sh\n"
+        "        run: ./dev up\n",
+    )
+    workflow.write_text(content)
+
+    diagnostics = pins.validate(tmp_path)
+
+    assert (
+        ".github/workflows/ci.yml: local action reference is forbidden: ./ci/bypass" in diagnostics
+    )
+    assert "CI foundation ordered step model differs" in diagnostics
+
+
+def test_ci_rejects_skipped_job_dependency(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    content = workflow.read_text().replace(
+        "jobs:\n  foundation:\n",
+        "jobs:\n"
+        "  prerequisite:\n"
+        "    if: false\n"
+        "    runs-on: ubuntu-24.04\n"
+        "    steps:\n"
+        "      - run: true\n"
+        "  foundation:\n"
+        "    needs: prerequisite\n",
+    )
+    workflow.write_text(content)
+
+    diagnostics = pins.validate(tmp_path)
+
+    assert "CI job set differs" in diagnostics
+    assert "CI foundation job model differs" in diagnostics
 
 
 def test_requires_oci_labels_official_downloads_and_locked_verification(tmp_path: Path) -> None:
