@@ -47,6 +47,7 @@ REMOTE_BEADS_GIT_ENV_PREFIX = (
     "-u",
     "GIT_WORK_TREE",
 )
+BEADS_INFORMATIONAL_ARGUMENTS = frozenset({"--help", "-h", "--version"})
 REDACTED = b"[REDACTED]"
 
 
@@ -107,6 +108,16 @@ def _redact(value: bytes, secrets: Sequence[bytes]) -> bytes:
     for secret in secrets:
         redacted = redacted.replace(secret, REDACTED)
     return redacted
+
+
+def _enabled_boolean_flag(arguments: Sequence[str], name: str) -> bool:
+    for argument in arguments:
+        if argument == name:
+            return True
+        prefix = f"{name}="
+        if argument.startswith(prefix):
+            return argument.removeprefix(prefix).lower() in {"1", "t", "true"}
+    return False
 
 
 def _emit_command(
@@ -232,7 +243,14 @@ class Launcher:
         normalized = self._required_arguments("beads", arguments)
         if normalized[0] != "init":
             self._require_local_beads()
-        remote_operation = normalized[0] == "bootstrap" or tuple(normalized[:2]) in {
+        is_bootstrap = normalized[0] == "bootstrap"
+        informational_bootstrap = is_bootstrap and any(
+            _enabled_boolean_flag(normalized[1:], argument)
+            for argument in BEADS_INFORMATIONAL_ARGUMENTS
+        )
+        remote_operation = (is_bootstrap and not informational_bootstrap) or tuple(
+            normalized[:2]
+        ) in {
             ("dolt", "push"),
             ("dolt", "pull"),
         }
@@ -243,6 +261,11 @@ class Launcher:
                 timeout=BEADS_COMMAND_TIMEOUT_SECONDS,
             )
 
+        normalize_after_bootstrap = (
+            is_bootstrap
+            and not _enabled_boolean_flag(normalized[1:], "--dry-run")
+            and self._beads_config_has_final_lf()
+        )
         token = self._github_token()
         token_environment = {"GH_TOKEN": token}
         beads_environment = {"BEADS_DIR": BEADS_DIR, **token_environment}
@@ -262,8 +285,39 @@ class Launcher:
                 environment=beads_environment,
                 timeout=REMOTE_BEADS_TIMEOUT_SECONDS,
             )
-        _emit_exec(result, self.stdout, self.stderr, secrets=secrets)
-        return result.exit_code
+            _emit_exec(result, self.stdout, self.stderr, secrets=secrets)
+            if result.exit_code != 0 or not normalize_after_bootstrap:
+                return result.exit_code
+
+            normalization = api.exec(
+                ("python", "-m", "scripts.automation.beads_config"),
+                environment={"BEADS_DIR": BEADS_DIR},
+                timeout=BEADS_COMMAND_TIMEOUT_SECONDS,
+            )
+        _emit_exec(normalization, self.stdout, self.stderr, secrets=secrets)
+        return normalization.exit_code
+
+    def _beads_config_has_final_lf(self) -> bool:
+        marker = self.project.root / BEADS_CONFIG
+        if not hasattr(os, "O_NOFOLLOW"):
+            raise LauncherError("this platform cannot inspect the Beads config safely")
+        try:
+            descriptor = os.open(marker, os.O_RDONLY | os.O_NOFOLLOW)
+        except OSError as error:
+            raise LauncherError("cannot inspect the Beads config safely") from error
+
+        try:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise LauncherError(BEADS_NOT_INITIALIZED)
+            if metadata.st_size == 0:
+                return False
+            os.lseek(descriptor, -1, os.SEEK_END)
+            return os.read(descriptor, 1) == b"\n"
+        except OSError as error:
+            raise LauncherError("cannot inspect the Beads config safely") from error
+        finally:
+            os.close(descriptor)
 
     def _require_local_beads(self) -> None:
         beads_dir = self.project.root / BEADS_CONFIG.parent

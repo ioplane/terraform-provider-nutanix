@@ -77,6 +77,19 @@ worktree/common-dir variables. Keep the remote exec environment exactly
 `BEADS_DIR` plus the short-lived `GH_TOKEN`; keep `gh auth setup-git`
 token-only. Ordinary Beads, Task, and shell operations are unchanged.
 
+Pinned Beads 1.1.2 serializes `sync.remote` with `strings.Join` and removes the
+tracked config's final LF during an executing bootstrap. Before invoking `bd`,
+the launcher records through a read-only, non-symlink file descriptor whether
+the regular source config ended in LF. Only when that provenance is true and an
+execution-mode bootstrap returns zero does it run `python -m
+scripts.automation.beads_config` inside the same toolbox with only `BEADS_DIR`.
+The normalizer appends a single missing LF through a regular, non-symlink file
+descriptor, preserves all other bytes and file mode, and rejects missing,
+empty, directory, or symlink targets. Help and version use the ordinary
+token-free path; dry-run remains remote-capable but never normalizes. A source
+already lacking LF is never normalized. A normalizer failure makes bootstrap
+fail. No normalization runs after failed bootstrap or any other Beads command.
+
 Wrap every noninteractive container command with pinned GNU `timeout`, using a
 direct argument array and no shell. The wall-clock limits are 60 minutes for
 Task, 5 minutes for ordinary Beads, 1 minute for remote Git authentication

@@ -71,6 +71,15 @@ from conflicting with Beads' internal Git subprocesses. The exec still
 receives only `BEADS_DIR` plus the short-lived `GH_TOKEN`; the preceding
 `gh auth setup-git` exec remains token-only. No shell is involved, and ordinary
 Beads, Task, and interactive-shell commands retain their existing environment.
+Pinned Beads 1.1.2 rewrites an existing `sync.remote` entry without a final LF
+during an executing bootstrap. The launcher first records, read-only, whether
+the regular source config ended in LF. Only if that canonical source later
+survives a successful execution-mode bootstrap does it run the repository
+normalizer inside the same toolbox with only `BEADS_DIR`. Help, version, and
+dry-run invocations never normalize; a source already lacking LF remains
+visible as drift. The normalizer appends one LF only when missing and refuses
+empty, non-regular, or symlinked configs. This keeps a tracked project config
+byte-stable without exposing credentials or hiding other Beads changes.
 
 Every noninteractive container command runs under the pinned GNU `timeout`
 binary without a shell. Task commands have a 60-minute limit, ordinary Beads

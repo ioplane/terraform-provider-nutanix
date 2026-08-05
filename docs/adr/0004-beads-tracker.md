@@ -55,6 +55,16 @@ it. This lets Beads select `/workspace/.beads` and lets its internal Git
 commands rediscover the repository without the explicit worktree variables
 that otherwise produce a fatal Git configuration error.
 
+The tracked `config.yaml` follows the repository text convention and ends in
+LF. Pinned Beads 1.1.2 removes that LF when an executing bootstrap persists the
+existing `sync.remote` value. The launcher records the canonical final LF
+before invoking `bd`; only that provenance plus a successful execution-mode
+bootstrap permits a bounded, token-free toolbox normalizer to append the
+missing LF. Help, version, dry-run, failed bootstrap, and a source already
+lacking LF never normalize. The normalization is deliberately limited to this
+one byte; all other post-bootstrap drift remains visible to Git and fails the
+clean-clone acceptance check.
+
 Keep exactly one critical-path task `in_progress`. Close a task only after its
 acceptance evidence is attached.
 

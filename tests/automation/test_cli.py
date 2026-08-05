@@ -155,6 +155,14 @@ def test_dev_wrapper_uses_exact_uv_bootstrap_and_preserves_arguments() -> None:
     ]
 
 
+def test_beads_config_uses_repository_text_canonicalization() -> None:
+    config = Path(".beads/config.yaml").read_bytes()
+
+    assert config.endswith(
+        b'sync.remote: "git+https://github.com/ioplane/terraform-provider-nutanix.git"\n'
+    )
+
+
 @pytest.mark.parametrize("command", ["up", "down", "status", "shell", "task", "beads"])
 def test_parser_exposes_exact_commands(command: str) -> None:
     cli = _cli()
@@ -667,8 +675,131 @@ def test_remote_beads_bootstrap_uses_sanitized_git_environment(tmp_path: Path) -
                 "timeout": cli.REMOTE_BEADS_TIMEOUT_SECONDS,
             },
         ),
+        (
+            ("python", "-m", "scripts.automation.beads_config"),
+            {
+                "environment": {"BEADS_DIR": "/workspace/.beads"},
+                "timeout": cli.BEADS_COMMAND_TIMEOUT_SECONDS,
+            },
+        ),
     ]
     assert exit_code == 0
+
+
+@pytest.mark.parametrize(
+    ("results", "expected_exit", "expected_exec_count"),
+    [
+        ([ExecResult(0, b"", b""), ExecResult(9, b"", b"bootstrap failed")], 9, 2),
+        (
+            [
+                ExecResult(0, b"", b""),
+                ExecResult(0, b"", b""),
+                ExecResult(8, b"", b"normalization failed"),
+            ],
+            8,
+            3,
+        ),
+    ],
+)
+def test_bootstrap_propagates_remote_or_normalizer_failure(
+    tmp_path: Path,
+    results: list[ExecResult],
+    expected_exit: int,
+    expected_exec_count: int,
+) -> None:
+    cli = _cli()
+    api = FakeAPI()
+    api.results = results
+    project = _project(tmp_path)
+    _write_beads_marker(project)
+
+    exit_code, _, stderr, _ = _main(
+        cli,
+        ("beads", "bootstrap", "--non-interactive"),
+        project=project,
+        runner=FakeRunner(),
+        api=api,
+        env={"GH_TOKEN": "bootstrap-token"},
+    )
+
+    assert exit_code == expected_exit
+    assert len(api.exec_calls) == expected_exec_count
+    assert b"failed" in stderr
+
+
+@pytest.mark.parametrize("argument", ["--dry-run", "--dry-run=true", "--dry-run=t", "--dry-run=1"])
+def test_bootstrap_dry_run_never_invokes_normalizer(tmp_path: Path, argument: str) -> None:
+    cli = _cli()
+    api = FakeAPI()
+    project = _project(tmp_path)
+    _write_beads_marker(project)
+
+    exit_code, _, _, _ = _main(
+        cli,
+        ("beads", "bootstrap", argument),
+        project=project,
+        runner=FakeRunner(),
+        api=api,
+        env={"GH_TOKEN": "bootstrap-token"},
+    )
+
+    assert exit_code == 0
+    assert len(api.exec_calls) == 2
+    assert api.exec_calls[-1][0][-2:] == ("bootstrap", argument)
+
+
+@pytest.mark.parametrize(
+    "argument",
+    ["--help", "--help=true", "-h", "-h=true", "--version", "--version=true"],
+)
+def test_bootstrap_information_never_resolves_credentials_or_normalizes(
+    tmp_path: Path, argument: str
+) -> None:
+    cli = _cli()
+    runner = FakeRunner()
+    api = FakeAPI()
+    project = _project(tmp_path)
+    _write_beads_marker(project)
+
+    exit_code, _, _, _ = _main(
+        cli,
+        ("beads", "bootstrap", argument),
+        project=project,
+        runner=runner,
+        api=api,
+    )
+
+    assert exit_code == 0
+    assert api.exec_calls == [
+        (
+            ("bd", "bootstrap", argument),
+            {
+                "environment": {"BEADS_DIR": "/workspace/.beads"},
+                "timeout": cli.BEADS_COMMAND_TIMEOUT_SECONDS,
+            },
+        )
+    ]
+    assert runner.calls == []
+
+
+def test_bootstrap_preserves_preexisting_noncanonical_config(tmp_path: Path) -> None:
+    cli = _cli()
+    api = FakeAPI()
+    project = _project(tmp_path)
+    marker = _write_beads_marker(project)
+    marker.write_bytes(b"backend: dolt")
+
+    exit_code, _, _, _ = _main(
+        cli,
+        ("beads", "bootstrap", "--non-interactive"),
+        project=project,
+        runner=FakeRunner(),
+        api=api,
+        env={"GH_TOKEN": "bootstrap-token"},
+    )
+
+    assert exit_code == 0
+    assert len(api.exec_calls) == 2
 
 
 def test_remote_beads_falls_back_to_bounded_host_gh_token(tmp_path: Path) -> None:
