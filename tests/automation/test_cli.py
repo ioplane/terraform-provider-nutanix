@@ -335,6 +335,31 @@ def test_launcher_remote_beads_without_marker_rejects_before_credentials_or_conn
     assert runner.calls == []
 
 
+def test_launcher_bootstrap_without_marker_rejects_before_credentials_or_connector(
+    tmp_path: Path,
+) -> None:
+    cli = _cli()
+    runner = FakeRunner()
+    api = FakeAPI()
+
+    exit_code, stdout, stderr, connector_calls = _main(
+        cli,
+        ("beads", "bootstrap", "--non-interactive"),
+        project=_project(tmp_path),
+        runner=runner,
+        api=api,
+        env={"GH_TOKEN": "must-not-be-read"},
+    )
+
+    assert exit_code == 1
+    assert stdout == b""
+    assert b"Beads is not initialized in this worktree" in stderr
+    assert connector_calls == []
+    assert api.wait_calls == []
+    assert api.exec_calls == []
+    assert runner.calls == []
+
+
 def test_beads_init_without_marker_uses_exact_worktree_environment(tmp_path: Path) -> None:
     cli = _cli()
     api = FakeAPI()

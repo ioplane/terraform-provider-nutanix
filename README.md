@@ -61,8 +61,10 @@ readiness, status, and noninteractive commands are bounded host operations;
 only `./dev shell` uses an interactive host `podman exec`. GitHub tokens are
 removed from every ordinary host subprocess and container operation. Known
 token values are redacted from captured output and are injected only for
-`./dev beads dolt push` or `./dev beads dolt pull`.
-For those two remote Dolt operations only, the launcher runs `bd` through the
+`./dev beads bootstrap`, `./dev beads dolt push`, or `./dev beads dolt pull`.
+Bootstrap remains behind the fail-closed worktree marker guard described
+above; only exact first-argument `init` bypasses that guard. For those three
+remote Beads operations only, the launcher runs `bd` through the
 exact argument-array prefix `/usr/bin/env -u GIT_COMMON_DIR -u GIT_DIR -u
 GIT_WORK_TREE`. This prevents the container's explicit Git worktree variables
 from conflicting with Beads' internal Git subprocesses. The exec still

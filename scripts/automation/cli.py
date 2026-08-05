@@ -228,7 +228,7 @@ class Launcher:
         )
 
     def beads(self, arguments: Sequence[str]) -> int:
-        """Run bd, injecting a short-lived token only for remote Dolt operations."""
+        """Run bd, injecting a short-lived token only for remote Beads operations."""
         normalized = self._required_arguments("beads", arguments)
         if normalized[0] != "init":
             self._require_local_beads()

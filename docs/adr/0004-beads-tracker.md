@@ -46,12 +46,14 @@ volume mounts because a runtime may create the child mountpoint in the host
 bind while applying mounts.
 
 Remote Dolt synchronization has a narrower Git environment than ordinary
-toolbox commands. Invoke only `bd dolt push` and `bd dolt pull` through the
-direct argument-array prefix `/usr/bin/env -u GIT_COMMON_DIR -u GIT_DIR -u
-GIT_WORK_TREE`, while preserving `BEADS_DIR` and the short-lived `GH_TOKEN` in
-the per-exec environment. This lets Beads select `/workspace/.beads` and lets
-its internal Git commands rediscover the repository without the explicit
-worktree variables that otherwise produce a fatal Git configuration error.
+toolbox commands. Invoke only `bd bootstrap`, `bd dolt push`, and `bd dolt
+pull` through the direct argument-array prefix `/usr/bin/env -u GIT_COMMON_DIR
+-u GIT_DIR -u GIT_WORK_TREE`, while preserving `BEADS_DIR` and the short-lived
+`GH_TOKEN` in the per-exec environment. Bootstrap remains behind the same
+fail-closed worktree marker guard; only exact first-argument `init` bypasses
+it. This lets Beads select `/workspace/.beads` and lets its internal Git
+commands rediscover the repository without the explicit worktree variables
+that otherwise produce a fatal Git configuration error.
 
 Keep exactly one critical-path task `in_progress`. Close a task only after its
 acceptance evidence is attached.

@@ -61,13 +61,16 @@ host-side mountpoint while applying mounts sequentially.
 Remove `GH_TOKEN` and `GITHUB_TOKEN` from ordinary Compose, shell, Task, and
 Beads environments and every ordinary host subprocess environment. Redact both
 known nonempty token values from captured host-command output. Only remote
-`bd dolt push` and `bd dolt pull` operations may receive a token, with nonempty
-precedence `GH_TOKEN`, `GITHUB_TOKEN`, then a bounded, scrubbed host
-`gh auth token` lookup. Inject the token per exec, configure Git authentication
-in the container first, and redact it from both output streams.
+`bd bootstrap`, `bd dolt push`, and `bd dolt pull` operations may receive a
+token, with nonempty precedence `GH_TOKEN`, `GITHUB_TOKEN`, then a bounded,
+scrubbed host `gh auth token` lookup. Inject the token per exec, configure Git
+authentication in the container first, and redact it from both output streams.
+`bd bootstrap` remains subject to the fail-closed worktree marker guard; the
+only bypass remains an exact first-argument `init` command.
 
-For remote `bd dolt push` and `bd dolt pull` only, prefix the direct argument
-array with `/usr/bin/env -u GIT_COMMON_DIR -u GIT_DIR -u GIT_WORK_TREE`.
+For remote `bd bootstrap`, `bd dolt push`, and `bd dolt pull` only, prefix the
+direct argument array with `/usr/bin/env -u GIT_COMMON_DIR -u GIT_DIR -u
+GIT_WORK_TREE`.
 Beads resolves the worktree database from `BEADS_DIR`, while its internal Git
 commands rediscover repository metadata without conflicting explicit
 worktree/common-dir variables. Keep the remote exec environment exactly
