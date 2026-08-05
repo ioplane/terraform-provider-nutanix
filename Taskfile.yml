@@ -53,6 +53,13 @@ tasks:
     cmds:
       - ruff format scripts tests
 
+  python:format:check:
+    desc: Reject Python formatting drift without rewriting sources
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - ruff format --check scripts tests
+
   python:lint:
     desc: Lint Python sources and tests
     deps: [_container]
@@ -131,6 +138,41 @@ tasks:
     cmds:
       - python -m scripts.checks.staged
 
+  repo:check:
+    desc: Validate repository structure and tracked-file safety
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.checks.repository
+
+  pins:check:
+    desc: Validate immutable container, tool, action, and artifact pins
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.checks.pins
+
+  tools:check:
+    desc: Validate exact machine-readable toolbox versions
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.checks.tool_versions
+
+  docs:check:
+    desc: Generate Framework docs from an offline packaged schema and reject drift
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - SOURCE_DATE_EPOCH=1700000000 python -m scripts.checks.docs
+
+  release:check:
+    desc: Validate the GoReleaser release-shape configuration
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - goreleaser check .goreleaser.yml
+
   go:mod:init:
     desc: Initialize the exact Go module and download pinned provider dependencies
     deps: [_container]
@@ -198,12 +240,39 @@ tasks:
     cmds:
       - gofmt -w cmd internal
 
+  go:format:check:
+    desc: Reject Go formatting drift without rewriting sources
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - |
+        set -eu
+        unformatted="$(gofmt -l cmd internal)"
+        if test -n "${unformatted}"; then
+          printf '%s\n' "${unformatted}"
+          exit 1
+        fi
+
   go:vet:
     desc: Run Go static analysis
     deps: [_container]
     dir: /workspace
     cmds:
       - go vet ./...
+
+  go:lint:
+    desc: Run the pinned Go linter
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - golangci-lint run ./...
+
+  go:vuln:
+    desc: Scan reachable Go code with the pinned vulnerability checker
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - govulncheck ./...
 
   go:test:race:
     desc: Run Go tests with the race detector and container compiler
@@ -224,3 +293,47 @@ tasks:
         -o .cache/bin/terraform-provider-nutanix
         ./cmd/terraform-provider-nutanix
       - go version -m .cache/bin/terraform-provider-nutanix
+
+  package:test:
+    desc: Prove deterministic packaging and checksum-selected offline installation
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - >-
+        SOURCE_DATE_EPOCH=1700000000
+        python -m scripts.package.provider test --version 0.0.0-dev
+
+  all:
+    desc: Run the complete M0 foundation quality gate in deterministic order
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - task: repo:check
+      - task: repo:staged-cache-check
+      - task: artifacts:verify
+      - task: python:format:check
+      - task: python:lint
+      - task: python:typecheck
+      - task: python:test
+      - task: go:format:check
+      - task: go:vet
+      - task: go:lint
+      - task: go:test
+      - task: go:test:race
+      - task: go:vuln
+      - task: docs:check
+      - task: pins:check
+      - task: tools:check
+      - task: release:check
+      - task: tracker:check
+      - task: roadmap:check
+      - task: go:build
+      - task: go:test:protocol
+      - task: package:test
+
+  verify:
+    desc: Alias for the complete M0 foundation quality gate
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - task: all

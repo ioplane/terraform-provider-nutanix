@@ -1,0 +1,51 @@
+version: 2
+
+project_name: terraform-provider-nutanix
+dist: .cache/goreleaser
+
+builds:
+  - id: terraform-provider-nutanix
+    main: ./cmd/terraform-provider-nutanix
+    binary: terraform-provider-nutanix_v{{ .Version }}
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -X main.version={{ .Version }}
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    goamd64:
+      - v1
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: terraform-provider-nutanix
+    ids:
+      - terraform-provider-nutanix
+    formats:
+      - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds_info:
+      mode: 0755
+      mtime: "{{ .CommitTimestamp }}"
+    files:
+      - src: LICENSE
+        dst: LICENSE
+        strip_parent: true
+        info:
+          mode: 0644
+          mtime: "{{ .CommitTimestamp }}"
+
+checksum:
+  name_template: SHA256SUMS
+  algorithm: sha256
+
+changelog:
+  disable: true
+
+release:
+  disable: true

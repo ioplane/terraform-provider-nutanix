@@ -1,6 +1,6 @@
 # Terraform Provider for Nutanix
 
-> **Development status:** the M0 foundation is in progress. No Terraform resources, data sources, or actions are implemented. This repository is not ready for provider use.
+> **Development status:** the M0 foundation is in progress. The empty provider loads through Terraform Plugin Protocol 6, but no Terraform resources, data sources, or actions are implemented. This repository is not ready for provider use.
 
 This project targets a greenfield Terraform provider for the Nutanix Cloud Platform. The M0 foundation establishes a handwritten modular monolith built with Terraform Plugin Framework and intended to use Terraform Plugin Protocol 6. It does not use a Nutanix SDK as a runtime dependency or generate implementation code from OpenAPI.
 
@@ -21,12 +21,22 @@ Go, Terraform, Task, Beads, or Python tools installed.
 ./dev up
 ./dev status
 ./dev task versions
-./dev task python:test
+./dev task all
+./dev task verify
 ./dev beads init --skip-agents
 ./dev beads --version
 ./dev shell
 ./dev down
 ```
+
+`all` is the canonical sequential M0 gate. It validates repository safety,
+downloads and verifies all 57 locked official API artifacts across 19 Nutanix
+namespaces, runs Python and Go quality checks (including the race detector and
+reachable-vulnerability scan), rejects generated-document drift, validates
+every container/tool/release pin, checks Beads and its roadmap projection,
+builds the provider, proves Terraform Protocol 6 loading, and verifies a
+byte-reproducible ZIP through a checksum-selected offline Terraform install.
+`verify` is an exact alias for `all`.
 
 `./dev task` and `./dev beads` preserve every following argument as a direct
 container argument. Build, test, lint, generation, packaging, Terraform, Task,
