@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundation:
+    name: Foundation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # tool-version: UV_VERSION=0.12.1
+      - name: Install pinned uv launcher
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.1"
+          enable-cache: false
+
+      - name: Verify host Podman
+        run: podman version
+
+      - name: Start private Podman API service
+        shell: bash
+        run: |
+          set -euo pipefail
+          socket_dir="${RUNNER_TEMP}/podman-api"
+          socket="${socket_dir}/podman.sock"
+          service_log="${RUNNER_TEMP}/podman-service.log"
+          mkdir -m 0700 "${socket_dir}"
+          podman system service --time=0 "unix://${socket}" >"${service_log}" 2>&1 &
+          service_pid=$!
+          echo "PODMAN_SERVICE_PID=${service_pid}" >> "${GITHUB_ENV}"
+          echo "CONTAINER_HOST=unix://${socket}" >> "${GITHUB_ENV}"
+          for _ in {1..100}; do
+            if test -S "${socket}"; then
+              exit 0
+            fi
+            if ! kill -0 "${service_pid}" 2>/dev/null; then
+              cat "${service_log}"
+              exit 1
+            fi
+            sleep 0.1
+          done
+          cat "${service_log}"
+          exit 1
+
+      - name: Build development container
+        run: ./dev up
+
+      - name: Run complete foundation gate
+        run: ./dev task all
+
+      - name: Report container status on failure
+        if: failure()
+        continue-on-error: true
+        run: ./dev status

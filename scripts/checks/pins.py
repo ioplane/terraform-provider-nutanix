@@ -13,6 +13,10 @@ import yaml
 CONTAINERFILE = Path("deployments/containers/Containerfile.dev")
 COMPOSE_FILE = Path("deployments/compose/compose.dev.yml")
 MANIFEST_FILE = Path("specs/nutanix/manifest.json")
+CI_FILE = Path(".github/workflows/ci.yml")
+DEPENDABOT_FILE = Path(".github/dependabot.yml")
+CODEOWNERS_FILE = Path(".github/CODEOWNERS")
+PULL_REQUEST_TEMPLATE_FILE = Path(".github/pull_request_template.md")
 EXPECTED_BASE_DIGEST = "sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7"
 EXPECTED_TOOL_ARGUMENTS = {
     "TASK_VERSION": "3.52.0",
@@ -48,12 +52,51 @@ REQUIRED_NAMESPACES = (
     "volumes",
 )
 REQUIRED_ARTIFACTS = {"openapi", "postman", "errors"}
+EXPECTED_ACTIONS = {
+    "actions/checkout": ("3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
+    "astral-sh/setup-uv": ("c771a70e6277c0a99b617c7a806ffedaca235ff9", "v9.0.0"),
+}
+EXPECTED_PODMAN_SERVICE_SCRIPT = """\
+set -euo pipefail
+socket_dir="${RUNNER_TEMP}/podman-api"
+socket="${socket_dir}/podman.sock"
+service_log="${RUNNER_TEMP}/podman-service.log"
+mkdir -m 0700 "${socket_dir}"
+podman system service --time=0 "unix://${socket}" >"${service_log}" 2>&1 &
+service_pid=$!
+echo "PODMAN_SERVICE_PID=${service_pid}" >> "${GITHUB_ENV}"
+echo "CONTAINER_HOST=unix://${socket}" >> "${GITHUB_ENV}"
+for _ in {1..100}; do
+  if test -S "${socket}"; then
+    exit 0
+  fi
+  if ! kill -0 "${service_pid}" 2>/dev/null; then
+    cat "${service_log}"
+    exit 1
+  fi
+  sleep 0.1
+done
+cat "${service_log}"
+exit 1
+"""
+EXPECTED_DEPENDABOT_DIRECTORIES = {
+    "docker": "/deployments/containers",
+    "github-actions": "/",
+    "gomod": "/",
+    "uv": "/",
+}
+REQUIRED_DEPENDABOT_ECOSYSTEMS = set(EXPECTED_DEPENDABOT_DIRECTORIES)
 
 _ARGUMENT = re.compile(r"^ARG ([A-Z][A-Z0-9_]*)=(\S+)$", re.MULTILINE)
 _FROM = re.compile(r"^FROM\s+(\S+)", re.MULTILINE)
 _ACTION = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)", re.MULTILINE)
 _ACTION_SHA = re.compile(r"^[^@]+@[0-9a-f]{40}$")
 _CI_MARKER = re.compile(r"^\s*#\s*tool-version:\s*([A-Z][A-Z0-9_]*)=(\S+)\s*$", re.MULTILINE)
+_HOST_DEVELOPMENT_TOOL = re.compile(
+    r"(?<![A-Za-z0-9_.-])(?:/[A-Za-z0-9_.-]+)*/?"
+    r"(?:go|gofmt|terraform|task|pytest|python|python3|ruff|ty|uv|uvx|"
+    r"golangci-lint|govulncheck|goreleaser|tfplugindocs)(?=\s|$)"
+)
 
 
 def _container_diagnostics(root: Path) -> tuple[list[str], dict[str, str]]:
@@ -137,6 +180,203 @@ def _workflow_diagnostics(root: Path, arguments: dict[str, str]) -> list[str]:
     return diagnostics
 
 
+def _ci_policy_diagnostics(root: Path) -> list[str]:
+    path = root / CI_FILE
+    if not path.is_file():
+        return [f"GitHub policy file missing: {CI_FILE.as_posix()}"]
+    text = path.read_text()
+    try:
+        document = yaml.load(text, Loader=yaml.BaseLoader)
+    except yaml.YAMLError:
+        return ["CI workflow is invalid YAML"]
+    if not isinstance(document, dict):
+        return ["CI workflow must be an object"]
+
+    diagnostics: list[str] = []
+    triggers = document.get("on")
+    if not isinstance(triggers, dict) or set(triggers) != {"push", "pull_request"}:
+        diagnostics.append("CI triggers must include push and pull_request")
+    elif not isinstance(triggers.get("push"), dict) or triggers["push"].get("branches") != ["main"]:
+        diagnostics.append("CI push trigger must select main")
+    if document.get("permissions") != {"contents": "read"}:
+        diagnostics.append("CI permissions must be exactly contents read")
+    concurrency = document.get("concurrency")
+    if not isinstance(concurrency, dict) or concurrency.get("cancel-in-progress") != "true":
+        diagnostics.append("CI concurrency cancellation differs")
+    elif concurrency.get("group") != "${{ github.workflow }}-${{ github.ref }}":
+        diagnostics.append("CI concurrency group differs")
+
+    jobs = document.get("jobs")
+    foundation = jobs.get("foundation") if isinstance(jobs, dict) else None
+    if not isinstance(foundation, dict):
+        diagnostics.append("CI foundation job is missing")
+        return diagnostics
+    if foundation.get("name") != "Foundation":
+        diagnostics.append("CI foundation check name differs")
+    if foundation.get("runs-on") != "ubuntu-24.04":
+        diagnostics.append("CI foundation runner must be ubuntu-24.04")
+    if "permissions" in foundation:
+        diagnostics.append("CI job-level permissions are forbidden")
+
+    steps = foundation.get("steps")
+    if not isinstance(steps, list) or not all(isinstance(step, dict) for step in steps):
+        diagnostics.append("CI foundation steps must be an array of objects")
+        return diagnostics
+
+    observed_actions: dict[str, list[str]] = {}
+    for step in steps:
+        reference = step.get("uses")
+        if not isinstance(reference, str) or reference.startswith("./"):
+            continue
+        action, separator, _revision = reference.partition("@")
+        if not separator:
+            continue
+        observed_actions.setdefault(action, []).append(reference)
+    if set(observed_actions) != set(EXPECTED_ACTIONS):
+        diagnostics.append("CI action set differs")
+    for action, (sha256, release) in EXPECTED_ACTIONS.items():
+        expected_reference = f"{action}@{sha256}"
+        if observed_actions.get(action) != [expected_reference]:
+            diagnostics.append(f"CI action pin differs: {action}")
+        annotation = re.compile(
+            rf"^\s*uses:\s*{re.escape(expected_reference)}\s+#\s*{re.escape(release)}\s*$",
+            re.MULTILINE,
+        )
+        if annotation.search(text) is None:
+            diagnostics.append(f"CI action release annotation differs: {action}")
+
+    checkout = next(
+        (
+            step
+            for step in steps
+            if isinstance(step.get("uses"), str)
+            and cast(str, step["uses"]).startswith("actions/checkout@")
+        ),
+        None,
+    )
+    checkout_with = checkout.get("with") if isinstance(checkout, dict) else None
+    if not isinstance(checkout_with, dict) or checkout_with.get("persist-credentials") != "false":
+        diagnostics.append("CI checkout must disable persisted credentials")
+
+    setup_uv = next(
+        (
+            step
+            for step in steps
+            if isinstance(step.get("uses"), str)
+            and cast(str, step["uses"]).startswith("astral-sh/setup-uv@")
+        ),
+        None,
+    )
+    setup_uv_with = setup_uv.get("with") if isinstance(setup_uv, dict) else None
+    if not isinstance(setup_uv_with, dict) or str(setup_uv_with.get("version")) != "0.12.1":
+        diagnostics.append("CI setup-uv version differs")
+    if f"# tool-version: UV_VERSION={EXPECTED_TOOL_ARGUMENTS['UV_VERSION']}" not in text:
+        diagnostics.append("CI UV tool marker is missing")
+
+    run_steps = [cast(str, step["run"]) for step in steps if isinstance(step.get("run"), str)]
+    run_text = "\n".join(run_steps)
+    service_steps = [
+        step for step in steps if step.get("name") == "Start private Podman API service"
+    ]
+    if (
+        len(service_steps) != 1
+        or not isinstance(service_steps[0].get("run"), str)
+        or cast(str, service_steps[0]["run"]).strip() != EXPECTED_PODMAN_SERVICE_SCRIPT.strip()
+    ):
+        diagnostics.append("CI Podman service step differs")
+    if (
+        "${RUNNER_TEMP}" not in run_text
+        or "mkdir -m 0700" not in run_text
+        or "podman system service --time=0" not in run_text
+    ):
+        diagnostics.append("CI must start a private Podman API service")
+    if "CONTAINER_HOST=unix://" not in run_text or "${GITHUB_ENV}" not in run_text:
+        diagnostics.append("CI must export CONTAINER_HOST")
+    if not any(command.strip() == "podman version" for command in run_steps):
+        diagnostics.append("CI must verify host Podman")
+    if not any(command.strip() == "./dev up" for command in run_steps):
+        diagnostics.append("CI must run ./dev up")
+    if not any(command.strip() == "./dev task all" for command in run_steps):
+        diagnostics.append("CI must run ./dev task all")
+    if not any(
+        step.get("if") == "failure()"
+        and isinstance(step.get("run"), str)
+        and cast(str, step["run"]).strip() == "./dev status"
+        for step in steps
+    ):
+        diagnostics.append("CI must run ./dev status on failure")
+
+    approved_commands = {"podman version", "./dev up", "./dev task all", "./dev status"}
+    for step in steps:
+        command = step.get("run")
+        if not isinstance(command, str):
+            continue
+        if (
+            command.strip() not in approved_commands
+            and step.get("name") != "Start private Podman API service"
+        ):
+            diagnostics.append(
+                f"CI host command step is not approved: {step.get('name', '<unnamed>')}"
+            )
+        for line in command.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("./dev "):
+                continue
+            if _HOST_DEVELOPMENT_TOOL.search(stripped):
+                diagnostics.append(f"CI host development command is forbidden: {stripped}")
+    return diagnostics
+
+
+def _dependabot_diagnostics(root: Path) -> list[str]:
+    path = root / DEPENDABOT_FILE
+    if not path.is_file():
+        return [f"GitHub policy file missing: {DEPENDABOT_FILE.as_posix()}"]
+    try:
+        document = yaml.safe_load(path.read_text())
+    except yaml.YAMLError:
+        return ["Dependabot configuration is invalid YAML"]
+    if not isinstance(document, dict) or document.get("version") != 2:
+        return ["Dependabot configuration version differs"]
+    updates = document.get("updates")
+    if not isinstance(updates, list):
+        return ["Dependabot updates must be an array"]
+
+    entries: dict[str, dict[str, Any]] = {}
+    duplicate = False
+    for update in updates:
+        if not isinstance(update, dict) or not isinstance(update.get("package-ecosystem"), str):
+            continue
+        ecosystem = cast(str, update["package-ecosystem"])
+        if ecosystem in entries:
+            duplicate = True
+        entries[ecosystem] = cast(dict[str, Any], update)
+
+    diagnostics: list[str] = []
+    if set(entries) != REQUIRED_DEPENDABOT_ECOSYSTEMS or duplicate:
+        diagnostics.append("Dependabot ecosystem set differs")
+    for ecosystem in sorted(set(entries) & REQUIRED_DEPENDABOT_ECOSYSTEMS):
+        entry = entries[ecosystem]
+        if entry.get("directory") != EXPECTED_DEPENDABOT_DIRECTORIES[ecosystem]:
+            diagnostics.append(f"Dependabot directory differs: {ecosystem}")
+        schedule = entry.get("schedule")
+        if not isinstance(schedule, dict) or schedule.get("interval") != "weekly":
+            diagnostics.append(f"Dependabot schedule differs: {ecosystem}")
+    return diagnostics
+
+
+def _github_policy_diagnostics(root: Path, arguments: dict[str, str]) -> list[str]:
+    diagnostics = _ci_policy_diagnostics(root)
+    diagnostics.extend(_dependabot_diagnostics(root))
+    for relative in (CODEOWNERS_FILE, PULL_REQUEST_TEMPLATE_FILE):
+        path = root / relative
+        if not path.is_file():
+            diagnostics.append(f"GitHub policy file missing: {relative.as_posix()}")
+        elif not path.read_text().strip():
+            diagnostics.append(f"GitHub policy file is empty: {relative.as_posix()}")
+    diagnostics.extend(_workflow_diagnostics(root, arguments))
+    return diagnostics
+
+
 def _manifest_diagnostics(root: Path) -> list[str]:
     path = root / MANIFEST_FILE
     if not path.is_file():
@@ -167,7 +407,7 @@ def validate(root: Path) -> list[str]:
     container, arguments = _container_diagnostics(root)
     diagnostics = container
     diagnostics.extend(_compose_diagnostics(root))
-    diagnostics.extend(_workflow_diagnostics(root, arguments))
+    diagnostics.extend(_github_policy_diagnostics(root, arguments))
     diagnostics.extend(_manifest_diagnostics(root))
     return sorted(set(diagnostics))
 
@@ -186,7 +426,9 @@ def main(
             print(f"pins: {diagnostic}", file=stderr)
         return 1
     print(
-        f"pins: ok ({len(EXPECTED_TOOL_ARGUMENTS)} tools, {len(REQUIRED_NAMESPACES)} namespaces)",
+        "pins: ok "
+        f"({len(EXPECTED_TOOL_ARGUMENTS)} tools, {len(EXPECTED_ACTIONS)} actions, "
+        f"{len(REQUIRED_NAMESPACES)} namespaces)",
         file=stdout,
     )
     return 0
