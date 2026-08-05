@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m1.2` — Provider configuration and diagnostics
+`ntnx-m1.3` — Authentication TLS and origin-bound HTTP client
