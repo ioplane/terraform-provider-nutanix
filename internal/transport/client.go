@@ -37,6 +37,7 @@ var (
 	ErrMissingRoundTripper = errors.New("transport client round tripper is missing")
 	// ErrInvalidAuthorizationState identifies an authorizer that did not apply exactly one authentication mode.
 	ErrInvalidAuthorizationState = errors.New("transport authorization state is invalid")
+	errResponseWithError         = errors.New("round trip returned a response and an error")
 )
 
 type authorizer interface {
@@ -50,6 +51,7 @@ type requestPlan struct {
 	query          url.Values
 	headers        http.Header
 	jsonBody       []byte
+	requestID      string
 }
 
 type attemptRoundTripper struct {
@@ -60,9 +62,13 @@ type attemptRoundTripper struct {
 
 // Client owns one immutable HTTPS origin, authentication mode, and HTTP client.
 type Client struct {
-	origin     Origin
-	httpClient *http.Client
-	eventSink  eventSink
+	origin          Origin
+	httpClient      *http.Client
+	eventSink       eventSink
+	requestIDSource requestIDSource
+	jitterSource    jitterSource
+	retrySleeper    retrySleeper
+	now             func() time.Time
 }
 
 // NewClient constructs an origin-bound client without making a network request.
@@ -135,8 +141,12 @@ func newClientWithSink(
 		userAgent:  buildUserAgent(providerVersion, terraformVersion),
 	}
 	return &Client{
-		origin:    origin,
-		eventSink: sink,
+		origin:          origin,
+		eventSink:       sink,
+		requestIDSource: newRandomRequestID,
+		jitterSource:    fullJitter,
+		retrySleeper:    sleepForRetry,
+		now:             time.Now,
 		httpClient: &http.Client{
 			Transport: attempt,
 			Timeout:   timeout,
@@ -147,31 +157,30 @@ func newClientWithSink(
 	}, nil
 }
 
-// Execute performs exactly one bounded operation attempt. Retry policy is
-// applied by a later kernel layer and is intentionally absent here.
+// Execute performs one logical operation with its immutable retry policy.
 func (c *Client) Execute(ctx context.Context, request Request) (response Response, resultErr error) {
 	operation := safeOperation(request.operation)
 	if c == nil || c.origin.host == "" || c.httpClient == nil ||
 		isNilInterface(c.httpClient.Transport) || isNilInterface(c.eventSink) {
 		return Response{}, newTransportError(operation, TransportFailureRequest, ErrRequestFailed)
 	}
-	event := attemptEvent{
-		operation:    operation,
-		method:       request.method,
-		pathTemplate: request.pathTemplate,
-		attempt:      1,
-	}
-	started := time.Now()
-	defer func() {
-		event.duration = time.Since(started)
-		c.eventSink.EmitAttempt(ctx, event)
-	}()
-
 	if ctx == nil || !request.valid {
 		return Response{}, newTransportError(operation, TransportFailureRequest, ErrInvalidRequest)
 	}
 	if err := ctx.Err(); err != nil {
 		return Response{}, newTransportError(operation, transportKindForCause(err), err)
+	}
+	if c.now == nil {
+		return Response{}, newTransportError(operation, TransportFailureRequest, ErrRequestFailed)
+	}
+
+	requestID := ""
+	if request.retryClass == RetryIdempotentMutation && request.permitsRetry() {
+		var ok bool
+		requestID, ok = requestIDFor(request, c.requestIDSource)
+		if !ok {
+			return Response{}, newTransportError(operation, TransportFailureRequest, ErrRequestFailed)
+		}
 	}
 
 	plan := requestPlan{
@@ -181,43 +190,104 @@ func (c *Client) Execute(ctx context.Context, request Request) (response Respons
 		query:          cloneQuery(request.query),
 		headers:        request.headers.Clone(),
 		jsonBody:       slices.Clone(request.jsonBody),
-	}
-	rawResponse, err := c.executeAttempt(ctx, plan)
-	event.status = statusFromResponse(rawResponse)
-	if rawResponse != nil {
-		event.correlationID = responseCorrelationID(rawResponse.Header)
-	}
-	if err != nil {
-		closeResponseBody(rawResponse)
-		cause := stableAttemptCause(ctx, err)
-		return Response{}, newTransportError(operation, transportKindForCause(cause), cause)
-	}
-	if rawResponse == nil {
-		return Response{}, newTransportError(operation, TransportFailureRequest, ErrRequestFailed)
-	}
-	if rawResponse.Body == nil {
-		rawResponse.Body = http.NoBody
+		requestID:      requestID,
 	}
 
-	headers := rawResponse.Header.Clone()
-	correlationID := responseCorrelationID(headers)
-	limit := request.successBodyLimit
-	if !request.expects(rawResponse.StatusCode) {
-		limit = DefaultErrorBodyLimit
+	budget := retryBudget{}
+	for attempt := 1; attempt <= maximumAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return Response{}, newTransportError(operation, transportKindForCause(err), err)
+		}
+
+		started := c.now()
+		rawResponse, attemptErr := c.executeAttempt(ctx, plan)
+		event := attemptEvent{
+			operation:     operation,
+			method:        request.method,
+			pathTemplate:  request.pathTemplate,
+			attempt:       attempt,
+			status:        statusFromResponse(rawResponse),
+			correlationID: requestID,
+		}
+		if rawResponse != nil && event.correlationID == "" {
+			event.correlationID = responseCorrelationID(rawResponse.Header)
+		}
+
+		var (
+			currentError error
+			retryable    bool
+			retryAfter   string
+		)
+		if attemptErr != nil {
+			if !sameKnownError(canonicalErrorCause(attemptErr), ErrRedirectRefused) {
+				closeResponseBody(rawResponse)
+			}
+			retryable = classifyRetryableTransportError(ctx, attemptErr)
+			cause := stableAttemptCause(ctx, attemptErr)
+			if retryable && sameKnownError(cause, context.DeadlineExceeded) {
+				cause = ErrRequestFailed
+			}
+			currentError = newTransportError(operation, transportKindForCause(cause), cause)
+		} else if rawResponse == nil {
+			currentError = newTransportError(operation, TransportFailureRequest, ErrRequestFailed)
+		} else {
+			if rawResponse.Body == nil {
+				rawResponse.Body = http.NoBody
+			}
+			headers := rawResponse.Header.Clone()
+			correlationID := responseCorrelationID(headers)
+			limit := request.successBodyLimit
+			if !request.expects(rawResponse.StatusCode) {
+				limit = DefaultErrorBodyLimit
+			}
+			body, readErr := readBoundedBody(rawResponse.Body, limit)
+			closeErr := rawResponse.Body.Close()
+			switch {
+			case readErr != nil:
+				cause := stableReadCause(ctx, readErr)
+				currentError = newTransportError(operation, transportKindForCause(cause), cause)
+			case closeErr != nil:
+				currentError = newTransportError(operation, TransportFailureResponseClose, ErrResponseClose)
+			case request.expects(rawResponse.StatusCode):
+				event.duration = nonNegativeDuration(c.now().Sub(started))
+				c.eventSink.EmitAttempt(ctx, event)
+				return newResponse(rawResponse.StatusCode, headers, body, correlationID), nil
+			default:
+				currentError = newHTTPError(operation, rawResponse.StatusCode, correlationID, body)
+				retryable = retryableHTTPStatus(rawResponse.StatusCode)
+				retryAfter = uniqueHeaderValueEqualFold(headers, "Retry-After")
+			}
+		}
+
+		event.duration = nonNegativeDuration(c.now().Sub(started))
+		c.eventSink.EmitAttempt(ctx, event)
+		if attempt == maximumAttempts || !request.permitsRetry() || !retryable ||
+			c.jitterSource == nil || c.retrySleeper == nil {
+			return Response{}, currentError
+		}
+		if err := ctx.Err(); err != nil {
+			return Response{}, newTransportError(operation, transportKindForCause(err), err)
+		}
+		delay, ok := budget.nextDelay(ctx, attempt, retryAfter, c.now(), c.jitterSource)
+		if !ok {
+			if err := ctx.Err(); err != nil {
+				return Response{}, newTransportError(operation, transportKindForCause(err), err)
+			}
+			return Response{}, currentError
+		}
+		if err := c.retrySleeper(ctx, delay); err != nil {
+			cause := stableAttemptCause(ctx, err)
+			return Response{}, newTransportError(operation, transportKindForCause(cause), cause)
+		}
 	}
-	body, readErr := readBoundedBody(rawResponse.Body, limit)
-	closeErr := rawResponse.Body.Close()
-	if readErr != nil {
-		cause := stableReadCause(ctx, readErr)
-		return Response{}, newTransportError(operation, transportKindForCause(cause), cause)
+	return Response{}, newTransportError(operation, TransportFailureRequest, ErrRequestFailed)
+}
+
+func nonNegativeDuration(value time.Duration) time.Duration {
+	if value < 0 {
+		return 0
 	}
-	if closeErr != nil {
-		return Response{}, newTransportError(operation, TransportFailureResponseClose, ErrResponseClose)
-	}
-	if !request.expects(rawResponse.StatusCode) {
-		return Response{}, newHTTPError(operation, rawResponse.StatusCode, correlationID, body)
-	}
-	return newResponse(rawResponse.StatusCode, headers, body, correlationID), nil
+	return value
 }
 
 func readBoundedBody(body io.Reader, limit int64) ([]byte, error) {
@@ -238,54 +308,44 @@ func closeResponseBody(response *http.Response) {
 }
 
 func stableAttemptCause(ctx context.Context, err error) error {
-	if errors.Is(err, ErrRedirectRefused) {
-		return ErrRedirectRefused
-	}
 	if ctx != nil {
 		if contextErr := ctx.Err(); contextErr != nil {
 			return contextErr
 		}
 	}
-	if errors.Is(err, context.Canceled) {
-		return context.Canceled
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return context.DeadlineExceeded
+	switch cause := canonicalErrorCause(err); cause {
+	case ErrRedirectRefused, context.Canceled, context.DeadlineExceeded:
+		return cause
 	}
 	return ErrRequestFailed
 }
 
 func stableReadCause(ctx context.Context, err error) error {
-	if errors.Is(err, ErrResponseTooLarge) {
-		return ErrResponseTooLarge
-	}
 	if ctx != nil {
 		if contextErr := ctx.Err(); contextErr != nil {
 			return contextErr
 		}
 	}
-	if errors.Is(err, context.Canceled) {
-		return context.Canceled
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return context.DeadlineExceeded
+	switch cause := canonicalErrorCause(err); cause {
+	case ErrResponseTooLarge, context.Canceled, context.DeadlineExceeded:
+		return cause
 	}
 	return ErrResponseRead
 }
 
 func transportKindForCause(cause error) TransportFailureKind {
-	switch {
-	case errors.Is(cause, context.Canceled):
+	switch cause {
+	case context.Canceled:
 		return TransportFailureCanceled
-	case errors.Is(cause, context.DeadlineExceeded):
+	case context.DeadlineExceeded:
 		return TransportFailureDeadline
-	case errors.Is(cause, ErrRedirectRefused):
+	case ErrRedirectRefused:
 		return TransportFailureRedirect
-	case errors.Is(cause, ErrResponseTooLarge):
+	case ErrResponseTooLarge:
 		return TransportFailureResponseLimit
-	case errors.Is(cause, ErrResponseRead):
+	case ErrResponseRead:
 		return TransportFailureResponseRead
-	case errors.Is(cause, ErrResponseClose):
+	case ErrResponseClose:
 		return TransportFailureResponseClose
 	default:
 		return TransportFailureRequest
@@ -440,7 +500,12 @@ func (c *Client) executeAttempt(ctx context.Context, plan requestPlan) (*http.Re
 	} else {
 		body = bytes.NewReader(nil)
 	}
-	request, err := http.NewRequestWithContext(ctx, plan.method, requestURL.String(), body)
+	request, err := http.NewRequestWithContext(
+		contextWithRequestID(ctx, plan.requestID),
+		plan.method,
+		requestURL.String(),
+		body,
+	)
 	if err != nil {
 		return nil, ErrInvalidRequest
 	}
@@ -480,12 +545,32 @@ func (t *attemptRoundTripper) RoundTrip(request *http.Request) (*http.Response, 
 		(authorizationCount != 0 || apiKeyCount != 1) {
 		return nil, ErrInvalidAuthorizationState
 	}
-	return t.base.RoundTrip(attempt)
+	deleteHeaderEqualFold(attempt.Header, requestIDHeader)
+	if requestID := requestIDFromContext(attempt.Context()); requestID != "" {
+		attempt.Header.Set(requestIDHeader, requestID)
+	}
+	response, err := t.base.RoundTrip(attempt)
+	if response != nil && err != nil {
+		closeResponseBody(response)
+		if sameKnownError(canonicalErrorCause(err), ErrRedirectRefused) {
+			return nil, ErrRedirectRefused
+		}
+		return nil, errResponseWithError
+	}
+	return response, err
 }
 
 func scrubAttemptHeaders(header http.Header) {
 	for key := range header {
 		if reservedAttemptHeader(key) {
+			delete(header, key)
+		}
+	}
+}
+
+func deleteHeaderEqualFold(header http.Header, name string) {
+	for key := range header {
+		if strings.EqualFold(key, name) {
 			delete(header, key)
 		}
 	}

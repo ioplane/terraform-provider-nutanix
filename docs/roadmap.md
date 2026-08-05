@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m1.5` — Request IDs retry classifier and budgets
+`ntnx-m1.6` — Pagination and ETags

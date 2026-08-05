@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTransportErrorHasSafeTypedFieldsAndApprovedCause(t *testing.T) {
@@ -34,6 +35,60 @@ func TestTransportErrorDropsUnapprovedCauseAndRedactsEveryRendering(t *testing.T
 		t.Fatal("TransportError exposed an unapproved raw cause")
 	}
 	assertErrorRenderingsRedacted(t, errorValue, []string{"network-cause-secret-canary"})
+}
+
+func TestTransportErrorDropsCyclicCausePromptly(t *testing.T) {
+	t.Parallel()
+
+	cycle := &cyclicUnwrapError{}
+	cycle.next = cycle
+	result := make(chan *TransportError, 1)
+	go func() {
+		result <- newTransportError("prism.get_task", TransportFailureRequest, cycle)
+	}()
+	select {
+	case transportError := <-result:
+		if transportError.Unwrap() != nil {
+			t.Fatal("TransportError exposed a cyclic cause")
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("newTransportError() did not return within bounded time")
+	}
+}
+
+func TestTransportErrorDropsDynamicallyUncomparableCausePromptly(t *testing.T) {
+	t.Parallel()
+
+	failure := dynamicallyUncomparableError{payload: []byte("constructor-payload-secret")}
+	type result struct {
+		transportError *TransportError
+		panic          any
+	}
+	results := make(chan result, 1)
+	go func() {
+		completed := result{}
+		defer func() {
+			completed.panic = recover()
+			results <- completed
+		}()
+		completed.transportError = newTransportError(
+			"prism.get_task",
+			TransportFailureRequest,
+			failure,
+		)
+	}()
+	select {
+	case completed := <-results:
+		if completed.panic != nil {
+			t.Fatalf("newTransportError() panicked: %v", completed.panic)
+		}
+		if completed.transportError.Unwrap() != nil {
+			t.Fatal("TransportError exposed a dynamically uncomparable cause")
+		}
+		assertErrorRenderingsRedacted(t, completed.transportError, []string{"constructor-payload-secret"})
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("newTransportError() did not return within bounded time")
+	}
 }
 
 func TestTransportErrorPreservesCallerAndStableKernelSentinels(t *testing.T) {

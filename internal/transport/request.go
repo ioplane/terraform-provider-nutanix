@@ -31,15 +31,18 @@ var (
 // RequestOptions describes one namespace-owned operation policy and its
 // request-specific inputs. NewRequest copies every reference-bearing value.
 type RequestOptions struct {
-	Operation        string
-	Method           string
-	PathTemplate     string
-	PathParameters   map[string]string
-	Query            url.Values
-	Headers          http.Header
-	JSONBody         []byte
-	ExpectedStatuses []int
-	SuccessBodyLimit int64
+	Operation         string
+	Method            string
+	PathTemplate      string
+	PathParameters    map[string]string
+	Query             url.Values
+	Headers           http.Header
+	JSONBody          []byte
+	ExpectedStatuses  []int
+	SuccessBodyLimit  int64
+	RetryClass        RetryClass
+	RequestIDRequired bool
+	Replayable        bool
 }
 
 // Format prevents operation inputs from entering formatted diagnostics or logs.
@@ -50,16 +53,19 @@ func (RequestOptions) Format(state fmt.State, verb rune) {
 // Request is an immutable, origin-independent operation request.
 // Its zero value is invalid.
 type Request struct {
-	operation        string
-	method           string
-	pathTemplate     string
-	pathParameters   map[string]string
-	query            url.Values
-	headers          http.Header
-	jsonBody         []byte
-	expectedStatuses map[int]struct{}
-	successBodyLimit int64
-	valid            bool
+	operation         string
+	method            string
+	pathTemplate      string
+	pathParameters    map[string]string
+	query             url.Values
+	headers           http.Header
+	jsonBody          []byte
+	expectedStatuses  map[int]struct{}
+	successBodyLimit  int64
+	retryClass        RetryClass
+	requestIDRequired bool
+	replayable        bool
+	valid             bool
 }
 
 // Format prevents locked request inputs from entering formatted diagnostics or logs.
@@ -94,6 +100,10 @@ func NewRequest(options RequestOptions) (Request, error) {
 	if len(options.ExpectedStatuses) == 0 {
 		return Request{}, ErrInvalidRequest
 	}
+	if !options.RetryClass.valid() ||
+		(options.RequestIDRequired && options.RetryClass != RetryIdempotentMutation) {
+		return Request{}, ErrInvalidRequest
+	}
 	expectedStatuses := make(map[int]struct{}, len(options.ExpectedStatuses))
 	for _, status := range options.ExpectedStatuses {
 		if status < http.StatusOK || status >= http.StatusMultipleChoices {
@@ -110,16 +120,19 @@ func NewRequest(options RequestOptions) (Request, error) {
 	}
 
 	return Request{
-		operation:        options.Operation,
-		method:           options.Method,
-		pathTemplate:     options.PathTemplate,
-		pathParameters:   cloneStringMap(options.PathParameters),
-		query:            cloneQuery(options.Query),
-		headers:          options.Headers.Clone(),
-		jsonBody:         slices.Clone(options.JSONBody),
-		expectedStatuses: expectedStatuses,
-		successBodyLimit: limit,
-		valid:            true,
+		operation:         options.Operation,
+		method:            options.Method,
+		pathTemplate:      options.PathTemplate,
+		pathParameters:    cloneStringMap(options.PathParameters),
+		query:             cloneQuery(options.Query),
+		headers:           options.Headers.Clone(),
+		jsonBody:          slices.Clone(options.JSONBody),
+		expectedStatuses:  expectedStatuses,
+		successBodyLimit:  limit,
+		retryClass:        options.RetryClass,
+		requestIDRequired: options.RequestIDRequired,
+		replayable:        options.Replayable,
+		valid:             true,
 	}, nil
 }
 

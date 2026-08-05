@@ -150,21 +150,19 @@ func (e *HTTPError) Body() []byte {
 }
 
 func approvedTransportCause(cause error) error {
-	for _, approved := range []error{
-		context.Canceled,
+	switch canonical := canonicalErrorCause(cause); canonical {
+	case context.Canceled,
 		context.DeadlineExceeded,
 		ErrRedirectRefused,
 		ErrInvalidRequest,
 		ErrRequestFailed,
 		ErrResponseRead,
 		ErrResponseTooLarge,
-		ErrResponseClose,
-	} {
-		if errors.Is(cause, approved) {
-			return approved
-		}
+		ErrResponseClose:
+		return canonical
+	default:
+		return nil
 	}
-	return nil
 }
 
 func safeOperation(operation string) string {
