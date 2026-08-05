@@ -572,7 +572,19 @@ def test_remote_beads_uses_precedence_per_exec_and_redacts_streams(
             },
         ),
         (
-            ("bd", "dolt", "push", "--force-with-lease"),
+            (
+                "/usr/bin/env",
+                "-u",
+                "GIT_COMMON_DIR",
+                "-u",
+                "GIT_DIR",
+                "-u",
+                "GIT_WORK_TREE",
+                "bd",
+                "dolt",
+                "push",
+                "--force-with-lease",
+            ),
             {
                 "environment": beads_environment,
                 "timeout": cli.REMOTE_BEADS_TIMEOUT_SECONDS,
@@ -616,6 +628,18 @@ def test_remote_beads_falls_back_to_bounded_host_gh_token(tmp_path: Path) -> Non
         },
         "timeout": cli.REMOTE_BEADS_TIMEOUT_SECONDS,
     }
+    assert api.exec_calls[1][0] == (
+        "/usr/bin/env",
+        "-u",
+        "GIT_COMMON_DIR",
+        "-u",
+        "GIT_DIR",
+        "-u",
+        "GIT_WORK_TREE",
+        "bd",
+        "dolt",
+        "pull",
+    )
     assert exit_code == 0
 
 

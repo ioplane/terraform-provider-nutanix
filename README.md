@@ -62,6 +62,13 @@ only `./dev shell` uses an interactive host `podman exec`. GitHub tokens are
 removed from every ordinary host subprocess and container operation. Known
 token values are redacted from captured output and are injected only for
 `./dev beads dolt push` or `./dev beads dolt pull`.
+For those two remote Dolt operations only, the launcher runs `bd` through the
+exact argument-array prefix `/usr/bin/env -u GIT_COMMON_DIR -u GIT_DIR -u
+GIT_WORK_TREE`. This prevents the container's explicit Git worktree variables
+from conflicting with Beads' internal Git subprocesses. The exec still
+receives only `BEADS_DIR` plus the short-lived `GH_TOKEN`; the preceding
+`gh auth setup-git` exec remains token-only. No shell is involved, and ordinary
+Beads, Task, and interactive-shell commands retain their existing environment.
 
 Every noninteractive container command runs under the pinned GNU `timeout`
 binary without a shell. Task commands have a 60-minute limit, ordinary Beads

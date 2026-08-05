@@ -66,6 +66,14 @@ precedence `GH_TOKEN`, `GITHUB_TOKEN`, then a bounded, scrubbed host
 `gh auth token` lookup. Inject the token per exec, configure Git authentication
 in the container first, and redact it from both output streams.
 
+For remote `bd dolt push` and `bd dolt pull` only, prefix the direct argument
+array with `/usr/bin/env -u GIT_COMMON_DIR -u GIT_DIR -u GIT_WORK_TREE`.
+Beads resolves the worktree database from `BEADS_DIR`, while its internal Git
+commands rediscover repository metadata without conflicting explicit
+worktree/common-dir variables. Keep the remote exec environment exactly
+`BEADS_DIR` plus the short-lived `GH_TOKEN`; keep `gh auth setup-git`
+token-only. Ordinary Beads, Task, and shell operations are unchanged.
+
 Wrap every noninteractive container command with pinned GNU `timeout`, using a
 direct argument array and no shell. The wall-clock limits are 60 minutes for
 Task, 5 minutes for ordinary Beads, 1 minute for remote Git authentication

@@ -38,6 +38,15 @@ TASK_COMMAND_TIMEOUT_SECONDS = 3600.0
 BEADS_COMMAND_TIMEOUT_SECONDS = 300.0
 REMOTE_SETUP_TIMEOUT_SECONDS = 60.0
 REMOTE_BEADS_TIMEOUT_SECONDS = 600.0
+REMOTE_BEADS_GIT_ENV_PREFIX = (
+    "/usr/bin/env",
+    "-u",
+    "GIT_COMMON_DIR",
+    "-u",
+    "GIT_DIR",
+    "-u",
+    "GIT_WORK_TREE",
+)
 REDACTED = b"[REDACTED]"
 
 
@@ -245,7 +254,7 @@ class Launcher:
             if setup.exit_code != 0:
                 return setup.exit_code
             result = api.exec(
-                ("bd", *normalized),
+                (*REMOTE_BEADS_GIT_ENV_PREFIX, "bd", *normalized),
                 environment=beads_environment,
                 timeout=REMOTE_BEADS_TIMEOUT_SECONDS,
             )
