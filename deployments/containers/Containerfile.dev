@@ -34,8 +34,6 @@ ENV GOTOOLCHAIN=local \
     UV_CACHE_DIR=/opt/uv-cache \
     PATH=/opt/venv/bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
 RUN set -eux; \
     sources=/etc/apt/sources.list.d/debian.sources; \
     debian_snapshot="http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}"; \
@@ -84,7 +82,8 @@ RUN set -eux; \
     }; \
     verify_locked() { \
         digest="$(locked_digest "$1" "$2" "$3" "$4")"; \
-        printf '%s  %s\n' "${digest}" "${tmp}/$4" | sha256sum --check -; \
+        printf '%s  %s\n' "${digest}" "${tmp}/$4" > "${tmp}/selected.sha256"; \
+        sha256sum --check "${tmp}/selected.sha256"; \
     }; \
     task_asset="task_linux_${arch}.tar.gz"; \
     download "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/${task_asset}" "${tmp}/${task_asset}"; \
