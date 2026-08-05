@@ -73,3 +73,24 @@ tasks:
     dir: /workspace
     cmds:
       - pytest {{.CLI_ARGS}}
+
+  tracker:check:
+    desc: Validate canonical Beads tracker state
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.checks.tracker
+
+  roadmap:generate:
+    desc: Generate the roadmap projection from canonical Beads state
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.generate.roadmap --output docs/roadmap.md
+
+  roadmap:check:
+    desc: Check the roadmap projection without rewriting it
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.generate.roadmap --check docs/roadmap.md

@@ -1,0 +1,284 @@
+{
+  "issues": [
+    {
+      "id": "ntnx-m0",
+      "title": "M0 Foundation",
+      "description": "Establish the provider foundation. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Every M0 exit criterion is evidenced.",
+      "status": "open",
+      "priority": 0,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m0", "phase"],
+      "dependencies": []
+    },
+    {
+      "id": "ntnx-m1",
+      "title": "M1 Kernel",
+      "description": "Implement the provider kernel. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Kernel contracts and gates pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m1", "phase"],
+      "dependencies": [{"depends_on_id": "ntnx-m0", "type": "blocks"}]
+    },
+    {
+      "id": "ntnx-m2",
+      "title": "M2 Read-only canary",
+      "description": "Deliver read-only canaries. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Read-only and import contracts pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m2", "phase"],
+      "dependencies": [{"depends_on_id": "ntnx-m1", "type": "blocks"}]
+    },
+    {
+      "id": "ntnx-m3",
+      "title": "M3 Foundation resources",
+      "description": "Deliver foundation resources. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Foundation resource gates pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m3", "phase"],
+      "dependencies": [{"depends_on_id": "ntnx-m2", "type": "blocks"}]
+    },
+    {
+      "id": "ntnx-m4",
+      "title": "M4 Compute and block storage",
+      "description": "Deliver compute and block storage. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Compute and storage gates pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m4", "phase"],
+      "dependencies": [{"depends_on_id": "ntnx-m3", "type": "blocks"}]
+    },
+    {
+      "id": "ntnx-m5",
+      "title": "M5 IAM",
+      "description": "Deliver IAM management. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "IAM gates pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m5", "phase"],
+      "dependencies": [{"depends_on_id": "ntnx-m4", "type": "blocks"}]
+    },
+    {
+      "id": "ntnx-m6",
+      "title": "M6 Objects compatibility",
+      "description": "Deliver Object Store compatibility. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Create-only Objects gates pass.",
+      "status": "open",
+      "priority": 2,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m6", "phase"],
+      "dependencies": [{"depends_on_id": "ntnx-m5", "type": "blocks"}]
+    },
+    {
+      "id": "ntnx-m7",
+      "title": "M7 Compatibility release",
+      "description": "Reach the downstream compatibility surface. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Compatibility fixtures and gates pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m7", "phase"],
+      "dependencies": [{"depends_on_id": "ntnx-m6", "type": "blocks"}]
+    },
+    {
+      "id": "ntnx-m8",
+      "title": "M8 Segmented Objects",
+      "description": "Deliver segmented Objects. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Segmented Objects gates pass.",
+      "status": "open",
+      "priority": 2,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m8", "phase"],
+      "dependencies": [{"depends_on_id": "ntnx-m7", "type": "blocks"}]
+    },
+    {
+      "id": "ntnx-m9",
+      "title": "M9 Product expansion",
+      "description": "Expand stable v4 products. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Product expansion gates pass.",
+      "status": "open",
+      "priority": 2,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m9", "phase"],
+      "dependencies": [{"depends_on_id": "ntnx-m8", "type": "blocks"}]
+    },
+    {
+      "id": "ntnx-m10",
+      "title": "M10 External planes",
+      "description": "Deliver external-plane adapters. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "External-plane adapter gates pass.",
+      "status": "open",
+      "priority": 2,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m10", "phase"],
+      "dependencies": [{"depends_on_id": "ntnx-m9", "type": "blocks"}]
+    },
+    {
+      "id": "ntnx-m0.1",
+      "title": "Repository and engineering contracts",
+      "description": "Implement Task 1. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Contract evidence is attached.",
+      "notes": "Commits 57baa556 through bcbdfc9d; check git diff --check exited 0.",
+      "status": "closed",
+      "priority": 0,
+      "issue_type": "task",
+      "labels": ["critical-path", "m0", "task-1"],
+      "parent": "ntnx-m0",
+      "dependencies": [{"depends_on_id": "ntnx-m0", "type": "parent-child"}]
+    },
+    {
+      "id": "ntnx-m0.2",
+      "title": "Reproducible Podman toolbox and tested host launcher",
+      "description": "Implement Task 2. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Toolbox and launcher evidence is attached.",
+      "notes": "Commits de5dd924 through df15b6b7; checks exact versions, Ruff, ty, and 70 Python tests passed in Podman.",
+      "status": "closed",
+      "priority": 0,
+      "issue_type": "task",
+      "labels": ["critical-path", "m0", "task-2"],
+      "parent": "ntnx-m0",
+      "dependencies": [
+        {"depends_on_id": "ntnx-m0", "type": "parent-child"},
+        {"depends_on_id": "ntnx-m0.1", "type": "blocks"}
+      ]
+    },
+    {
+      "id": "ntnx-m0.3",
+      "title": "Canonical Beads graph and generated roadmap",
+      "description": "Implement Task 3. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Tracker and roadmap gates pass.",
+      "status": "in_progress",
+      "priority": 0,
+      "issue_type": "task",
+      "labels": ["critical-path", "m0", "task-3"],
+      "parent": "ntnx-m0",
+      "dependencies": [
+        {"depends_on_id": "ntnx-m0", "type": "parent-child"},
+        {"depends_on_id": "ntnx-m0.2", "type": "blocks"}
+      ]
+    },
+    {
+      "id": "ntnx-m0.4",
+      "title": "Nutanix Developer Portal artifact lock",
+      "description": "Implement Task 4. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Artifact lock gates pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "task",
+      "labels": ["critical-path", "m0", "task-4"],
+      "parent": "ntnx-m0",
+      "dependencies": [
+        {"depends_on_id": "ntnx-m0", "type": "parent-child"},
+        {"depends_on_id": "ntnx-m0.3", "type": "blocks"}
+      ]
+    },
+    {
+      "id": "ntnx-m0.5",
+      "title": "Empty Framework provider and protocol 6 handshake",
+      "description": "Implement Task 5. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Protocol 6 provider gates pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "task",
+      "labels": ["critical-path", "m0", "task-5"],
+      "parent": "ntnx-m0",
+      "dependencies": [
+        {"depends_on_id": "ntnx-m0", "type": "parent-child"},
+        {"depends_on_id": "ntnx-m0.4", "type": "blocks"}
+      ]
+    },
+    {
+      "id": "ntnx-m0.6",
+      "title": "Repository gates, generated docs, and deterministic package",
+      "description": "Implement Task 6. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Repository and package gates pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "task",
+      "labels": ["critical-path", "m0", "task-6"],
+      "parent": "ntnx-m0",
+      "dependencies": [
+        {"depends_on_id": "ntnx-m0", "type": "parent-child"},
+        {"depends_on_id": "ntnx-m0.5", "type": "blocks"}
+      ]
+    },
+    {
+      "id": "ntnx-m0.7",
+      "title": "GitHub CI, dependency automation, and repository controls",
+      "description": "Implement Task 7. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "CI and repository-control gates pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "task",
+      "labels": ["critical-path", "m0", "task-7"],
+      "parent": "ntnx-m0",
+      "dependencies": [
+        {"depends_on_id": "ntnx-m0", "type": "parent-child"},
+        {"depends_on_id": "ntnx-m0.6", "type": "blocks"}
+      ]
+    },
+    {
+      "id": "ntnx-m0.8",
+      "title": "Final evidence, tracker reconciliation, and independent audit",
+      "description": "Implement Task 8. References: docs/superpowers/specs/2026-08-04-foundation-design.md and docs/superpowers/plans/2026-08-04-foundation.md.",
+      "design": "Design and implementation-plan references are locked.",
+      "acceptance_criteria": "Final evidence and reviews pass.",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "task",
+      "labels": ["critical-path", "m0", "task-8"],
+      "parent": "ntnx-m0",
+      "dependencies": [
+        {"depends_on_id": "ntnx-m0", "type": "parent-child"},
+        {"depends_on_id": "ntnx-m0.7", "type": "blocks"}
+      ]
+    }
+  ],
+  "ready": [
+    {
+      "id": "ntnx-m0",
+      "title": "M0 Foundation",
+      "status": "open",
+      "priority": 0,
+      "issue_type": "epic",
+      "labels": ["critical-path", "m0", "phase"]
+    }
+  ],
+  "in_progress": [
+    {
+      "id": "ntnx-m0.3",
+      "title": "Canonical Beads graph and generated roadmap",
+      "status": "in_progress",
+      "priority": 0,
+      "issue_type": "task",
+      "labels": ["critical-path", "m0", "task-3"]
+    }
+  ],
+  "cycles": []
+}
