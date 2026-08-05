@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m1.4` — Vendor-neutral responses errors redaction and logging
+`ntnx-m1.5` — Request IDs retry classifier and budgets

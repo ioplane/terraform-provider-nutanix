@@ -1,6 +1,6 @@
 # Terraform Provider for Nutanix
 
-> **Development status:** the M0 foundation is complete on the current delivery branch and M1 kernel design is in progress. The empty provider loads through Terraform Plugin Protocol 6, but no Terraform resources, data sources, or actions are implemented. This repository is not ready for provider use.
+> **Development status:** the M0 foundation is complete and M1 kernel implementation is in progress. Provider configuration plus the hand-written authentication, TLS, origin-bound HTTP, bounded response/error, redaction, and structured logging foundation are implemented; request IDs and retry policy are the active task. No Terraform resources, data sources, or actions are implemented. This repository is not ready for provider use.
 
 This project targets a greenfield Terraform provider for the Nutanix Cloud Platform. The M0 foundation establishes a handwritten modular monolith built with Terraform Plugin Framework and intended to use Terraform Plugin Protocol 6. It does not use a Nutanix SDK as a runtime dependency or generate implementation code from OpenAPI.
 

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -492,6 +493,418 @@ func TestClientRefusesRedirects(t *testing.T) {
 	if !errors.Is(err, ErrRedirectRefused) {
 		t.Fatalf("HTTP redirect error = %v, want ErrRedirectRefused", err)
 	}
+}
+
+func TestClientExecuteUsesExpectedStatusesWithoutVendorDecode(t *testing.T) {
+	t.Parallel()
+
+	const vendorBytes = `{not-json:"vendor-success-secret-canary"}`
+	client := testClientWithRoundTripper(t, auth.NewAPIKey("api-key-secret-canary"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if got := request.URL.Query().Get("filter"); got != "query-secret-canary" {
+			t.Fatalf("wire query = %q", got)
+		}
+		if got, want := request.URL.RawQuery, (url.Values{"filter": {"query-secret-canary"}}).Encode(); got != want {
+			t.Fatalf("wire RawQuery = %q, want deterministic url.Values.Encode %q", got, want)
+		}
+		return &http.Response{
+			StatusCode: http.StatusAccepted,
+			Header: http.Header{
+				"eTaG":            {`"opaque-etag-secret-canary"`},
+				"nTnX-rEqUeSt-Id": {"123e4567-e89b-12d3-a456-426614174000"},
+				"X-Vendor":        {"vendor-header-secret-canary"},
+			},
+			Body:    io.NopCloser(strings.NewReader(vendorBytes)),
+			Request: request,
+		}, nil
+	}))
+	request, err := NewRequest(RequestOptions{
+		Operation:        "prism.create_task",
+		Method:           http.MethodPost,
+		PathTemplate:     "/api/prism/v4.3/config/tasks/{extId}",
+		PathParameters:   map[string]string{"extId": "path-secret-canary"},
+		Query:            url.Values{"filter": {"query-secret-canary"}},
+		Headers:          http.Header{"X-Operation-Metadata": {"header-secret-canary"}},
+		JSONBody:         []byte(`{"name":"body-secret-canary"}`),
+		ExpectedStatuses: []int{http.StatusOK, http.StatusAccepted},
+	})
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+	response, err := client.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if response.StatusCode() != http.StatusAccepted || string(response.Body()) != vendorBytes {
+		t.Fatalf("response = status %d body %q", response.StatusCode(), response.Body())
+	}
+	if response.ETag() != `"opaque-etag-secret-canary"` {
+		t.Fatalf("ETag = %q", response.ETag())
+	}
+	if response.CorrelationID() != "123e4567-e89b-12d3-a456-426614174000" {
+		t.Fatalf("correlation ID = %q", response.CorrelationID())
+	}
+	if response.Headers().Get("X-Vendor") != "vendor-header-secret-canary" {
+		t.Fatal("response lost copied vendor-neutral headers")
+	}
+}
+
+func TestClientExecuteEnforcesSuccessAndErrorBodyCeilings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		status        int
+		bodySize      int64
+		successLimit  int64
+		wantHTTPError bool
+		wantTooLarge  bool
+	}{
+		{name: "default success exact", status: http.StatusOK, bodySize: DefaultSuccessBodyLimit},
+		{name: "default success overflow", status: http.StatusOK, bodySize: DefaultSuccessBodyLimit + 1, wantTooLarge: true},
+		{name: "lower success exact", status: http.StatusOK, bodySize: 32, successLimit: 32},
+		{name: "lower success overflow", status: http.StatusOK, bodySize: 33, successLimit: 32, wantTooLarge: true},
+		{name: "error exact", status: http.StatusBadRequest, bodySize: DefaultErrorBodyLimit, wantHTTPError: true},
+		{name: "error overflow", status: http.StatusBadRequest, bodySize: DefaultErrorBodyLimit + 1, wantTooLarge: true},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			body := &trackedSizedBody{remaining: test.bodySize}
+			client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: test.status, Header: make(http.Header), Body: body, Request: request}, nil
+			}))
+			request, err := NewRequest(RequestOptions{
+				Operation:        "prism.get_task",
+				Method:           http.MethodGet,
+				PathTemplate:     "/api/test",
+				ExpectedStatuses: []int{http.StatusOK},
+				SuccessBodyLimit: test.successLimit,
+			})
+			if err != nil {
+				t.Fatalf("NewRequest() error = %v", err)
+			}
+			response, executeErr := client.Execute(context.Background(), request)
+			if !body.closed.Load() {
+				t.Fatal("response body was not closed")
+			}
+			if test.wantTooLarge {
+				if response.StatusCode() != 0 || !errors.Is(executeErr, ErrResponseTooLarge) {
+					t.Fatalf("Execute() = %#v, %v; want ErrResponseTooLarge", response, executeErr)
+				}
+				return
+			}
+			if test.wantHTTPError {
+				var httpError *HTTPError
+				if !errors.As(executeErr, &httpError) || len(httpError.Body()) != int(test.bodySize) {
+					t.Fatalf("Execute() error = %v; bounded HTTP body length want %d", executeErr, test.bodySize)
+				}
+				return
+			}
+			if executeErr != nil || len(response.Body()) != int(test.bodySize) {
+				t.Fatalf("Execute() = body %d, %v; want %d bytes", len(response.Body()), executeErr, test.bodySize)
+			}
+		})
+	}
+}
+
+func TestClientExecuteClosesBodiesOnReadAndCloseFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		body      io.ReadCloser
+		wantCause error
+	}{
+		{name: "read failure", body: &failingTrackedBody{readErr: errors.New("reader-secret-canary")}, wantCause: ErrResponseRead},
+		{name: "close failure", body: &failingTrackedBody{closeErr: errors.New("close-secret-canary")}, wantCause: ErrResponseClose},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: test.body, Request: request}, nil
+			}))
+			request := mustTestRequest(t, http.StatusOK, 0)
+			_, err := client.Execute(context.Background(), request)
+			body := test.body.(*failingTrackedBody)
+			if !body.closed.Load() || !errors.Is(err, test.wantCause) {
+				t.Fatalf("closed = %t, error = %v; want %v", body.closed.Load(), err, test.wantCause)
+			}
+			assertErrorRenderingsRedacted(t, err, []string{"reader-secret-canary", "close-secret-canary"})
+		})
+	}
+}
+
+func TestClientExecuteTreatsNilResponseBodyAsEmptyAndClosesSafely(t *testing.T) {
+	t.Parallel()
+
+	client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: nil, Request: request}, nil
+	}))
+	response, err := client.Execute(context.Background(), mustTestRequest(t, http.StatusOK, 0))
+	if err != nil || len(response.Body()) != 0 {
+		t.Fatalf("Execute(nil body) = %#v, %v; want empty success", response, err)
+	}
+}
+
+func TestClientExecuteClosesBodyWhenCancellationInterruptsRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	body := &cancelAwareBody{ctx: ctx, started: make(chan struct{})}
+	client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: body, Request: request}, nil
+	}))
+	request := mustTestRequest(t, http.StatusOK, 0)
+	result := make(chan error, 1)
+	go func() {
+		_, err := client.Execute(ctx, request)
+		result <- err
+	}()
+	<-body.started
+	cancel()
+	err := <-result
+	if !body.closed.Load() || !errors.Is(err, context.Canceled) {
+		t.Fatalf("closed = %t, error = %v; want closed context.Canceled", body.closed.Load(), err)
+	}
+}
+
+func TestClientExecuteHonorsCallerCancellation(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls.Add(1)
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	}))
+	request := mustTestRequest(t, http.StatusOK, 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := client.Execute(ctx, request)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("RoundTrip calls = %d, want zero for pre-canceled context", calls.Load())
+	}
+}
+
+func TestClientExecuteClosesRedirectResponseAndReturnsTypedError(t *testing.T) {
+	t.Parallel()
+
+	body := &trackedSizedBody{remaining: 8}
+	client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusFound,
+			Header:     http.Header{"Location": {"/redirect-secret-canary"}},
+			Body:       body,
+			Request:    request,
+		}, nil
+	}))
+	_, err := client.Execute(context.Background(), mustTestRequest(t, http.StatusOK, 0))
+	if !body.closed.Load() {
+		t.Fatal("redirect response body was not closed")
+	}
+	if !errors.Is(err, ErrRedirectRefused) {
+		t.Fatalf("Execute() error = %v, want ErrRedirectRefused", err)
+	}
+	var transportError *TransportError
+	if !errors.As(err, &transportError) {
+		t.Fatalf("redirect error type = %T, want *TransportError", err)
+	}
+	assertErrorRenderingsRedacted(t, err, []string{"redirect-secret-canary"})
+}
+
+func TestClientExecuteCopiesResponseOutputs(t *testing.T) {
+	t.Parallel()
+
+	headers := http.Header{"ETag": {`"etag"`}, "X-Copy": {"original"}}
+	client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader("original")),
+			Request:    request,
+		}, nil
+	}))
+	response, err := client.Execute(context.Background(), mustTestRequest(t, http.StatusOK, 0))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	headers.Set("X-Copy", "remote-mutated")
+	firstHeaders := response.Headers()
+	firstHeaders.Set("X-Copy", "caller-mutated")
+	firstBody := response.Body()
+	firstBody[0] = 'x'
+	if response.Headers().Get("X-Copy") != "original" || string(response.Body()) != "original" {
+		t.Fatal("Response getters or source headers exposed mutable storage")
+	}
+}
+
+func TestClientExecuteRejectsZeroRequestWithoutNetwork(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls.Add(1)
+		return noContentResponse(request), nil
+	}))
+	_, err := client.Execute(context.Background(), Request{})
+	if !errors.Is(err, ErrInvalidRequest) || calls.Load() != 0 {
+		t.Fatalf("Execute(zero) = %v, calls %d; want ErrInvalidRequest and no network", err, calls.Load())
+	}
+}
+
+func TestClientExecuteRejectsNilAndZeroClientWithoutPanicOrNetwork(t *testing.T) {
+	t.Parallel()
+
+	request := mustTestRequest(t, http.StatusOK, 0)
+	clients := []*Client{nil, {}}
+	for index, client := range clients {
+		func() {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					t.Fatalf("client %d Execute() panicked: %v", index, recovered)
+				}
+			}()
+			_, err := client.Execute(context.Background(), request)
+			var transportError *TransportError
+			if !errors.As(err, &transportError) || !errors.Is(err, ErrRequestFailed) {
+				t.Fatalf("client %d Execute() error = %v, want safe TransportError with ErrRequestFailed", index, err)
+			}
+		}()
+	}
+}
+
+func TestClientExecuteRejectsAmbiguousETagAndCorrelationHeaders(t *testing.T) {
+	t.Parallel()
+
+	client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"ETag":            {`"first"`},
+				"etag":            {`"second"`},
+				"NTNX-Request-Id": {"123e4567-e89b-12d3-a456-426614174000"},
+				"ntnx-request-id": {"123e4567-e89b-12d3-a456-426614174001"},
+			},
+			Body:    http.NoBody,
+			Request: request,
+		}, nil
+	}))
+	response, err := client.Execute(context.Background(), mustTestRequest(t, http.StatusOK, 0))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if response.ETag() != "" || response.CorrelationID() != "" {
+		t.Fatalf("ambiguous metadata = ETag %q correlation %q, want both empty", response.ETag(), response.CorrelationID())
+	}
+}
+
+type trackedSizedBody struct {
+	remaining int64
+	closed    atomic.Bool
+}
+
+func (b *trackedSizedBody) Read(destination []byte) (int, error) {
+	if b.remaining == 0 {
+		return 0, io.EOF
+	}
+	count := int64(len(destination))
+	if count > b.remaining {
+		count = b.remaining
+	}
+	for index := int64(0); index < count; index++ {
+		destination[index] = 'x'
+	}
+	b.remaining -= count
+	return int(count), nil
+}
+
+func (b *trackedSizedBody) Close() error {
+	b.closed.Store(true)
+	return nil
+}
+
+type failingTrackedBody struct {
+	readErr  error
+	closeErr error
+	read     bool
+	closed   atomic.Bool
+}
+
+type cancelAwareBody struct {
+	ctx     context.Context
+	started chan struct{}
+	once    atomic.Bool
+	closed  atomic.Bool
+}
+
+func (b *cancelAwareBody) Read([]byte) (int, error) {
+	if b.once.CompareAndSwap(false, true) {
+		close(b.started)
+	}
+	<-b.ctx.Done()
+	return 0, b.ctx.Err()
+}
+
+func (b *cancelAwareBody) Close() error {
+	b.closed.Store(true)
+	return nil
+}
+
+func (b *failingTrackedBody) Read(destination []byte) (int, error) {
+	if b.readErr != nil {
+		return 0, b.readErr
+	}
+	if b.read {
+		return 0, io.EOF
+	}
+	b.read = true
+	copy(destination, "safe")
+	return len("safe"), nil
+}
+
+func (b *failingTrackedBody) Close() error {
+	b.closed.Store(true)
+	return b.closeErr
+}
+
+func mustTestRequest(t *testing.T, expectedStatus int, successLimit int64) Request {
+	t.Helper()
+	request, err := NewRequest(RequestOptions{
+		Operation:        "prism.get_task",
+		Method:           http.MethodGet,
+		PathTemplate:     "/api/test",
+		ExpectedStatuses: []int{expectedStatus},
+		SuccessBodyLimit: successLimit,
+	})
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+	return request
+}
+
+func testClientWithSink(t *testing.T, sink eventSink, base http.RoundTripper) *Client {
+	t.Helper()
+	origin := testOrigin(t)
+	client, err := newClientWithSink(
+		origin,
+		auth.NewAPIKey("api-key-secret-canary"),
+		&tls.Config{MinVersion: tls.VersionTLS12, ServerName: origin.Hostname()},
+		17*time.Second,
+		"1.2.3",
+		"1.15.8",
+		base,
+		sink,
+	)
+	if err != nil {
+		t.Fatalf("newClientWithSink() error = %v", err)
+	}
+	return client
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"reflect"
 	"slices"
 	"strings"
@@ -45,6 +47,7 @@ type requestPlan struct {
 	method         string
 	pathTemplate   string
 	pathParameters map[string]string
+	query          url.Values
 	headers        http.Header
 	jsonBody       []byte
 }
@@ -59,6 +62,7 @@ type attemptRoundTripper struct {
 type Client struct {
 	origin     Origin
 	httpClient *http.Client
+	eventSink  eventSink
 }
 
 // NewClient constructs an origin-bound client without making a network request.
@@ -94,11 +98,36 @@ func newClient(
 	terraformVersion string,
 	base http.RoundTripper,
 ) (*Client, error) {
+	return newClientWithSink(
+		origin,
+		selectedAuthorizer,
+		tlsConfig,
+		timeout,
+		providerVersion,
+		terraformVersion,
+		base,
+		tflogEventSink{},
+	)
+}
+
+func newClientWithSink(
+	origin Origin,
+	selectedAuthorizer authorizer,
+	tlsConfig *tls.Config,
+	timeout time.Duration,
+	providerVersion string,
+	terraformVersion string,
+	base http.RoundTripper,
+	sink eventSink,
+) (*Client, error) {
 	if err := validateClientDependencies(origin, selectedAuthorizer, tlsConfig, timeout); err != nil {
 		return nil, err
 	}
 	if isNilInterface(base) {
 		return nil, ErrMissingRoundTripper
+	}
+	if isNilInterface(sink) {
+		sink = tflogEventSink{}
 	}
 	attempt := &attemptRoundTripper{
 		base:       base,
@@ -106,7 +135,8 @@ func newClient(
 		userAgent:  buildUserAgent(providerVersion, terraformVersion),
 	}
 	return &Client{
-		origin: origin,
+		origin:    origin,
+		eventSink: sink,
 		httpClient: &http.Client{
 			Transport: attempt,
 			Timeout:   timeout,
@@ -115,6 +145,176 @@ func newClient(
 			},
 		},
 	}, nil
+}
+
+// Execute performs exactly one bounded operation attempt. Retry policy is
+// applied by a later kernel layer and is intentionally absent here.
+func (c *Client) Execute(ctx context.Context, request Request) (response Response, resultErr error) {
+	operation := safeOperation(request.operation)
+	if c == nil || c.origin.host == "" || c.httpClient == nil ||
+		isNilInterface(c.httpClient.Transport) || isNilInterface(c.eventSink) {
+		return Response{}, newTransportError(operation, TransportFailureRequest, ErrRequestFailed)
+	}
+	event := attemptEvent{
+		operation:    operation,
+		method:       request.method,
+		pathTemplate: request.pathTemplate,
+		attempt:      1,
+	}
+	started := time.Now()
+	defer func() {
+		event.duration = time.Since(started)
+		c.eventSink.EmitAttempt(ctx, event)
+	}()
+
+	if ctx == nil || !request.valid {
+		return Response{}, newTransportError(operation, TransportFailureRequest, ErrInvalidRequest)
+	}
+	if err := ctx.Err(); err != nil {
+		return Response{}, newTransportError(operation, transportKindForCause(err), err)
+	}
+
+	plan := requestPlan{
+		method:         request.method,
+		pathTemplate:   request.pathTemplate,
+		pathParameters: cloneStringMap(request.pathParameters),
+		query:          cloneQuery(request.query),
+		headers:        request.headers.Clone(),
+		jsonBody:       slices.Clone(request.jsonBody),
+	}
+	rawResponse, err := c.executeAttempt(ctx, plan)
+	event.status = statusFromResponse(rawResponse)
+	if rawResponse != nil {
+		event.correlationID = responseCorrelationID(rawResponse.Header)
+	}
+	if err != nil {
+		closeResponseBody(rawResponse)
+		cause := stableAttemptCause(ctx, err)
+		return Response{}, newTransportError(operation, transportKindForCause(cause), cause)
+	}
+	if rawResponse == nil {
+		return Response{}, newTransportError(operation, TransportFailureRequest, ErrRequestFailed)
+	}
+	if rawResponse.Body == nil {
+		rawResponse.Body = http.NoBody
+	}
+
+	headers := rawResponse.Header.Clone()
+	correlationID := responseCorrelationID(headers)
+	limit := request.successBodyLimit
+	if !request.expects(rawResponse.StatusCode) {
+		limit = DefaultErrorBodyLimit
+	}
+	body, readErr := readBoundedBody(rawResponse.Body, limit)
+	closeErr := rawResponse.Body.Close()
+	if readErr != nil {
+		cause := stableReadCause(ctx, readErr)
+		return Response{}, newTransportError(operation, transportKindForCause(cause), cause)
+	}
+	if closeErr != nil {
+		return Response{}, newTransportError(operation, TransportFailureResponseClose, ErrResponseClose)
+	}
+	if !request.expects(rawResponse.StatusCode) {
+		return Response{}, newHTTPError(operation, rawResponse.StatusCode, correlationID, body)
+	}
+	return newResponse(rawResponse.StatusCode, headers, body, correlationID), nil
+}
+
+func readBoundedBody(body io.Reader, limit int64) ([]byte, error) {
+	bounded, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(bounded)) > limit {
+		return nil, ErrResponseTooLarge
+	}
+	return bounded, nil
+}
+
+func closeResponseBody(response *http.Response) {
+	if response != nil && response.Body != nil {
+		_ = response.Body.Close()
+	}
+}
+
+func stableAttemptCause(ctx context.Context, err error) error {
+	if errors.Is(err, ErrRedirectRefused) {
+		return ErrRedirectRefused
+	}
+	if ctx != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+	}
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return context.DeadlineExceeded
+	}
+	return ErrRequestFailed
+}
+
+func stableReadCause(ctx context.Context, err error) error {
+	if errors.Is(err, ErrResponseTooLarge) {
+		return ErrResponseTooLarge
+	}
+	if ctx != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+	}
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return context.DeadlineExceeded
+	}
+	return ErrResponseRead
+}
+
+func transportKindForCause(cause error) TransportFailureKind {
+	switch {
+	case errors.Is(cause, context.Canceled):
+		return TransportFailureCanceled
+	case errors.Is(cause, context.DeadlineExceeded):
+		return TransportFailureDeadline
+	case errors.Is(cause, ErrRedirectRefused):
+		return TransportFailureRedirect
+	case errors.Is(cause, ErrResponseTooLarge):
+		return TransportFailureResponseLimit
+	case errors.Is(cause, ErrResponseRead):
+		return TransportFailureResponseRead
+	case errors.Is(cause, ErrResponseClose):
+		return TransportFailureResponseClose
+	default:
+		return TransportFailureRequest
+	}
+}
+
+func responseCorrelationID(header http.Header) string {
+	return validCorrelationIDOrEmpty(uniqueHeaderValueEqualFold(header, "NTNX-Request-Id"))
+}
+
+func uniqueHeaderValueEqualFold(header http.Header, name string) string {
+	var found string
+	var count int
+	for key, values := range header {
+		if !strings.EqualFold(key, name) {
+			continue
+		}
+		count += len(values)
+		if count > 1 {
+			return ""
+		}
+		if len(values) == 1 {
+			found = values[0]
+		}
+	}
+	if count != 1 {
+		return ""
+	}
+	return found
 }
 
 func validateClientDependencies(
@@ -221,6 +421,7 @@ func newRequestPlan(
 		method:         method,
 		pathTemplate:   pathTemplate,
 		pathParameters: parametersCopy,
+		query:          nil,
 		headers:        headers.Clone(),
 		jsonBody:       bodyCopy,
 	}
@@ -231,6 +432,7 @@ func (c *Client) executeAttempt(ctx context.Context, plan requestPlan) (*http.Re
 	if err != nil {
 		return nil, err
 	}
+	requestURL.RawQuery = plan.query.Encode()
 
 	var body *bytes.Reader
 	if plan.jsonBody != nil {
@@ -240,7 +442,7 @@ func (c *Client) executeAttempt(ctx context.Context, plan requestPlan) (*http.Re
 	}
 	request, err := http.NewRequestWithContext(ctx, plan.method, requestURL.String(), body)
 	if err != nil {
-		return nil, errors.New("request construction failed")
+		return nil, ErrInvalidRequest
 	}
 	if plan.jsonBody == nil {
 		request.Body = nil
