@@ -1,6 +1,11 @@
 # Contributing
 
-The M0 foundation is still in progress. Before contributing, read the authoritative [repository instructions](AGENTS.md), the approved [foundation design](docs/superpowers/specs/2026-08-04-foundation-design.md), and the approved [foundation implementation plan](docs/superpowers/plans/2026-08-04-foundation.md).
+The M0 foundation is complete on the current delivery branch and the M1 kernel
+is the active phase. Before contributing, read the authoritative
+[repository instructions](AGENTS.md), the
+[provider contract](docs/contract.md), the
+[M1 kernel design](docs/superpowers/specs/2026-08-05-m1-kernel-design.md), and
+the [M1 kernel implementation plan](docs/superpowers/plans/2026-08-05-m1-kernel.md).
 
 ## Workflow
 

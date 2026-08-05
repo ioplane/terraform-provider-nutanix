@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m1.1` — M1 kernel contract and ARC approval
+`ntnx-m1.2` — Provider configuration and diagnostics

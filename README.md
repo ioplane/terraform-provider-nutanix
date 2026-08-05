@@ -1,6 +1,6 @@
 # Terraform Provider for Nutanix
 
-> **Development status:** the M0 foundation is in progress. The empty provider loads through Terraform Plugin Protocol 6, but no Terraform resources, data sources, or actions are implemented. This repository is not ready for provider use.
+> **Development status:** the M0 foundation is complete on the current delivery branch and M1 kernel design is in progress. The empty provider loads through Terraform Plugin Protocol 6, but no Terraform resources, data sources, or actions are implemented. This repository is not ready for provider use.
 
 This project targets a greenfield Terraform provider for the Nutanix Cloud Platform. The M0 foundation establishes a handwritten modular monolith built with Terraform Plugin Framework and intended to use Terraform Plugin Protocol 6. It does not use a Nutanix SDK as a runtime dependency or generate implementation code from OpenAPI.
 
@@ -108,11 +108,15 @@ preserved.
 - [Naming standard](docs/standards/naming.md)
 - [Nutanix artifact standard](docs/standards/nutanix-artifacts.md)
 - [Testing standard](docs/standards/testing.md)
+- [Go dependency policy](docs/standards/dependencies.md)
 - [ADR 0001: Modular Monolith](docs/adr/0001-modular-monolith.md)
 - [ADR 0002: Hand-Written Nutanix Client](docs/adr/0002-hand-written-nutanix-client.md)
 - [ADR 0003: Podman Development Boundary](docs/adr/0003-podman-development-boundary.md)
 - [ADR 0004: Beads Tracker](docs/adr/0004-beads-tracker.md)
 - [ADR 0005: Nutanix Artifact Lock](docs/adr/0005-nutanix-artifact-lock.md)
+- [ADR 0006: M1 Hand-Written Kernel Contract](docs/adr/0006-m1-kernel-contract.md)
+- [M1 kernel design](docs/superpowers/specs/2026-08-05-m1-kernel-design.md)
+- [M1 kernel implementation plan](docs/superpowers/plans/2026-08-05-m1-kernel.md)
 - [Contribution guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 

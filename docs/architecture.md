@@ -25,12 +25,12 @@ Allowed dependencies are explicit:
 | Package | Allowed imports and constraints |
 | --- | --- |
 | `cmd/terraform-provider-nutanix` | Imports `provider` only. |
-| `provider` | May import `service`, `capability`, and Terraform Plugin Framework. |
-| `service` | May import `nutanix/<namespace>`, `task`, `capability`, and Terraform Plugin Framework. |
-| `nutanix/<namespace>` | May import `transport` and `auth` as needed; never imports Terraform Plugin Framework. |
-| `task` | Imports `transport`; never imports Terraform Plugin Framework. |
-| `capability` | May import `nutanix/<namespace>` and `transport`; never imports Terraform Plugin Framework. |
-| `transport` | May import `auth`; never imports Terraform Plugin Framework. |
+| `provider` | May import `service`, `auth`, `transport`, `task`, `capability`, Terraform Plugin Framework, and Terraform Plugin Log. |
+| `service` | May import `nutanix/<namespace>`, `task`, `capability`, and Terraform Plugin Framework; never imports `auth` or `transport`. |
+| `nutanix/<namespace>` | May import `transport`, `task`, and `capability` as needed; never imports `auth` or Terraform Plugin Framework. |
+| `task` | Depends only on the Go standard library and project-neutral helpers; never imports Terraform Plugin Framework. |
+| `capability` | Depends only on the Go standard library and project-neutral helpers; never imports a namespace, transport, or Terraform Plugin Framework. |
+| `transport` | May import `auth` and Terraform Plugin Log; never imports Terraform Plugin Framework. |
 | `auth` | Depends only on the Go standard library and project-neutral helpers; never imports Terraform Plugin Framework. |
 | `testserver` | May import production packages only for tests; no production package may import `testserver`. |
 
@@ -57,6 +57,96 @@ M0 will establish an empty provider served through Terraform Plugin Protocol
 resource. Product behavior begins only in later phases after its public
 contract is approved.
 
+## M1 kernel composition
+
+M1 preserves manual composition. `provider.Configure` resolves the Terraform
+configuration and environment, constructs immutable authentication and TLS
+values, then constructs one shared transport client and one lazy capability
+registry. Configuration constructs clients but performs no live network call.
+The configured provider data passed to future services contains interfaces at
+their point of consumption, not a service locator or global singleton.
+
+Each service package defines the smallest provider-data port it consumes.
+`provider` implements that port with already constructed namespace adapters,
+task waiters, and capability accessors. A service never receives the raw
+transport client and cannot construct an operation policy or bypass a
+namespace adapter.
+
+```text
+Terraform provider configuration
+          |
+          v
+internal/provider  ---- Framework diagnostics and tflog context
+          |
+          +---- internal/auth       Basic or X-ntnx-api-key
+          +---- internal/transport  HTTPS, errors, retry, pagination, ETag
+          +---- internal/task       context-bound Prism task waiter
+          +---- internal/capability lazy read-only probes and cache
+                         |
+                         v
+                internal/nutanix/<namespace>
+```
+
+The kernel uses five explicit boundaries:
+
+1. `provider` owns the public provider schema, null/unknown/environment
+   resolution, Framework diagnostics, and configured service data.
+2. `auth` owns credential application. It has no logging, environment access,
+   URL construction, or Terraform dependency.
+3. `transport` owns one origin-bound `net/http.Client`, TLS, request attempts,
+   body limits, typed HTTP errors, retry scheduling, pagination control, ETag
+   extraction, and structured attempt logging. It does not decode
+   namespace-specific success DTOs.
+4. `task` owns a synchronous state machine over a consumer-defined task reader.
+   Prism DTO conversion belongs to `nutanix/prism`, so the task package remains
+   vendor-shape-neutral and independently testable.
+5. `capability` owns concurrency-safe positive and negative probe results. A
+   namespace adapter supplies a documented read-only probe; the registry never
+   scans undocumented endpoints and never turns 401, 403, 429, or 5xx into an
+   unsupported result.
+
+Namespace packages describe every operation with an immutable operation
+policy: method, path template, expected response codes, response limit,
+request-ID requirement, and retry class. This is the only place where a
+mutation becomes idempotently retryable. The transport never infers that from
+`POST`, `PUT`, `PATCH`, or `DELETE` alone.
+
+`task` and `capability` define consumer-side interfaces and neutral values.
+Namespace adapters may import and implement those interfaces; the neutral
+packages never import a namespace. This direction lets `provider` compose the
+adapters without an import cycle.
+
+Retries are attempts within one logical operation. A stable
+`NTNX-Request-Id` spans all mutation attempts, while each attempt has its own
+duration and status event. Once a mutation returns a task reference, the
+mutation is complete from the transport perspective; task polling begins and
+the original mutation is not replayed.
+
+Pagination is callback-based rather than collect-all. A namespace adapter
+fetches and decodes one page; the shared walker advances zero-based pages,
+checks optional totals, detects short and empty pages, and enforces explicit
+page and item ceilings. It constructs the next query locally instead of
+following vendor-provided absolute links.
+
+ETags remain outside public Terraform state by default. Read operations expose
+the response ETag to their service. Update operations explicitly send
+`If-Match`; 412 and 428 remain typed results for service-level drift or
+concurrency handling. A future Terraform type ARC may approve private state or
+another persistence strategy, but M1 does not decide that on its behalf.
+
+## M1 dependency boundary
+
+The kernel is standard-library-first. Generic HTTP clients, retry frameworks,
+dependency-injection frameworks, a Nutanix SDK, and generated clients are not
+used. Approved versions and capability-triggered candidates are recorded in
+the [Go dependency policy](standards/dependencies.md).
+
+`tflog` is the sole runtime logging path. Transport logs contain only an
+allowlist of non-secret attempt metadata and use path templates rather than raw
+URLs. OpenTelemetry is intentionally outside M1 until exporter lifecycle,
+privacy, metric cardinality, and logical-operation span ownership have their
+own approved contract.
+
 ## Delivery phases
 
 | Phase | Architectural outcome |
@@ -80,5 +170,8 @@ each phase remain in the approved design and implementation plan.
 
 - [Approved foundation design](superpowers/specs/2026-08-04-foundation-design.md)
 - [Approved foundation implementation plan](superpowers/plans/2026-08-04-foundation.md)
+- [M1 kernel design](superpowers/specs/2026-08-05-m1-kernel-design.md)
+- [M1 kernel contract](contract.md#m1-provider-configuration)
+- [Go dependency policy](standards/dependencies.md)
 - [Terraform Plugin Framework](https://developer.hashicorp.com/terraform/plugin/framework)
 - [Terraform plugin protocol](https://developer.hashicorp.com/terraform/plugin/terraform-plugin-protocol)

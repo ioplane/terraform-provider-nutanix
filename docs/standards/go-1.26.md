@@ -28,6 +28,9 @@ its maintenance and security surface. Declare an interface in the consuming
 package at the point of use. Do not create an interface next to an
 implementation solely to enable mocking.
 
+The exact M1 module budget, deferred candidates, and rejected abstractions are
+defined in the [Go dependency policy](dependencies.md).
+
 ## Context, errors, and concurrency
 
 - `context.Context` is the first argument to request-bound work. Propagate it
@@ -82,3 +85,4 @@ an automatic mutating CI step, and its diff must pass the full gate.
 - [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments)
 - [Go security best practices](https://go.dev/doc/security/best-practices)
 - [Approved foundation design](../superpowers/specs/2026-08-04-foundation-design.md)
+- [Go dependency policy](dependencies.md)
