@@ -284,7 +284,7 @@ def test_noninteractive_commands_wait_and_forward_exact_arguments_without_token(
         ("--quiet", "init", "--skip-agents"),
     ],
 )
-def test_beads_without_marker_rejects_ordinary_command_before_external_boundaries(
+def test_launcher_beads_without_marker_rejects_ordinary_command_before_operational_boundaries(
     tmp_path: Path, arguments: tuple[str, ...]
 ) -> None:
     cli = _cli()
@@ -311,7 +311,7 @@ def test_beads_without_marker_rejects_ordinary_command_before_external_boundarie
     assert runner.calls == []
 
 
-def test_remote_beads_without_marker_rejects_before_credentials_or_connector(
+def test_launcher_remote_beads_without_marker_rejects_before_credentials_or_connector(
     tmp_path: Path,
 ) -> None:
     cli = _cli()
@@ -387,11 +387,18 @@ def test_beads_with_regular_marker_preserves_exact_worktree_environment(tmp_path
     ]
 
 
-def test_beads_rejects_non_regular_config_marker(tmp_path: Path) -> None:
+@pytest.mark.parametrize("marker_kind", ["directory", "symlink"])
+def test_beads_rejects_non_regular_config_marker(tmp_path: Path, marker_kind: str) -> None:
     cli = _cli()
     project = _project(tmp_path)
     marker = project.root / ".beads" / "config.yaml"
-    marker.mkdir(parents=True)
+    marker.parent.mkdir()
+    if marker_kind == "directory":
+        marker.mkdir()
+    else:
+        external = tmp_path / "external-config.yaml"
+        external.write_text("backend: dolt\n")
+        marker.symlink_to(external)
     api = FakeAPI()
 
     exit_code, _, _, connector_calls = _main(
@@ -404,6 +411,119 @@ def test_beads_rejects_non_regular_config_marker(tmp_path: Path) -> None:
 
     assert exit_code == 1
     assert connector_calls == []
+    assert api.exec_calls == []
+
+
+def test_symlinked_beads_parent_rejects_remote_before_token_connector_or_api(
+    tmp_path: Path,
+) -> None:
+    cli = _cli()
+    project = _project(tmp_path)
+    external = tmp_path / "external-fallback"
+    (external / "config.yaml").parent.mkdir(parents=True)
+    (external / "config.yaml").write_text("backend: dolt\n")
+    (project.root / ".beads").symlink_to(external, target_is_directory=True)
+    runner = FakeRunner()
+    api = FakeAPI()
+
+    exit_code, stdout, stderr, connector_calls = _main(
+        cli,
+        ("beads", "dolt", "pull"),
+        project=project,
+        runner=runner,
+        api=api,
+        env={"GH_TOKEN": "primary", "GITHUB_TOKEN": "secondary"},
+    )
+
+    assert exit_code == 1
+    assert stdout == b""
+    assert b"Beads is not initialized in this worktree" in stderr
+    assert runner.calls == []
+    assert connector_calls == []
+    assert api.wait_calls == []
+    assert api.exec_calls == []
+
+
+def test_main_discovers_project_with_three_scrubbed_bounded_git_calls_before_guard(
+    tmp_path: Path,
+) -> None:
+    cli = _cli()
+    project = _project(tmp_path)
+
+    class DiscoveryRunner:
+        def __init__(self) -> None:
+            self.calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+
+        def __call__(self, arguments: Sequence[str], **kwargs: object) -> CommandResult:
+            normalized = tuple(arguments)
+            self.calls.append((normalized, kwargs))
+            if "--show-toplevel" in normalized:
+                output = project.root
+            elif "--git-common-dir" in normalized:
+                output = project.git_common_dir
+            else:
+                output = project.git_dir
+            return CommandResult(normalized, 0, f"{output}\n", "")
+
+    runner = DiscoveryRunner()
+    api = FakeAPI()
+    connector_calls: list[tuple[str, str]] = []
+    stdout = io.BytesIO()
+    stderr = io.BytesIO()
+    host_env = {
+        "PATH": "/bin",
+        "GH_TOKEN": "primary",
+        "GITHUB_TOKEN": "secondary",
+    }
+
+    exit_code = cli.main(
+        ("beads", "where"),
+        runner=runner,
+        connector=_connector(api, connector_calls),
+        env=host_env,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    root = project.root.resolve()
+    expected_calls = [
+        (
+            "git",
+            "-C",
+            str(Path.cwd().resolve()),
+            "rev-parse",
+            "--path-format=absolute",
+            "--show-toplevel",
+        ),
+        (
+            "git",
+            "-C",
+            str(root),
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+        ),
+        (
+            "git",
+            "-C",
+            str(root),
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-dir",
+        ),
+    ]
+    assert [arguments for arguments, _ in runner.calls] == expected_calls
+    assert [kwargs for _, kwargs in runner.calls] == [
+        {"env": {"PATH": "/bin"}, "timeout": 15.0},
+        {"env": {"PATH": "/bin"}, "timeout": 15.0},
+        {"env": {"PATH": "/bin"}, "timeout": 15.0},
+    ]
+    assert all(arguments[0] == "git" for arguments, _ in runner.calls)
+    assert exit_code == 1
+    assert stdout.getvalue() == b""
+    assert b"Beads is not initialized in this worktree" in stderr.getvalue()
+    assert connector_calls == []
+    assert api.wait_calls == []
     assert api.exec_calls == []
 
 

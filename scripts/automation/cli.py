@@ -253,12 +253,20 @@ class Launcher:
         return result.exit_code
 
     def _require_local_beads(self) -> None:
+        beads_dir = self.project.root / BEADS_CONFIG.parent
         marker = self.project.root / BEADS_CONFIG
         try:
-            is_regular = stat.S_ISREG(marker.lstat().st_mode)
+            is_directory = stat.S_ISDIR(beads_dir.lstat().st_mode)
         except OSError:
-            is_regular = False
-        if not is_regular:
+            is_directory = False
+        if not is_directory:
+            raise LauncherError(BEADS_NOT_INITIALIZED)
+
+        try:
+            is_regular_config = stat.S_ISREG(marker.lstat().st_mode)
+        except OSError:
+            is_regular_config = False
+        if not is_regular_config:
             raise LauncherError(BEADS_NOT_INITIALIZED)
 
     def _exec(

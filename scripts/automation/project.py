@@ -12,6 +12,7 @@ from scripts.automation.process import CommandResult, run
 
 PROJECT_PREFIX = "nutanix-provider"
 PROJECT_HASH_LENGTH = 12
+GIT_DISCOVERY_TIMEOUT_SECONDS = 15.0
 
 Runner = Callable[..., CommandResult]
 
@@ -64,7 +65,17 @@ def discover_project(
         "--path-format=absolute",
         "--show-toplevel",
     )
-    root = Path(runner(root_arguments, env=git_env).stdout.strip()).expanduser().resolve()
+    root = (
+        Path(
+            runner(
+                root_arguments,
+                env=git_env,
+                timeout=GIT_DISCOVERY_TIMEOUT_SECONDS,
+            ).stdout.strip()
+        )
+        .expanduser()
+        .resolve()
+    )
     common_arguments = (
         "git",
         "-C",
@@ -74,7 +85,15 @@ def discover_project(
         "--git-common-dir",
     )
     git_common_dir = (
-        Path(runner(common_arguments, env=git_env).stdout.strip()).expanduser().resolve()
+        Path(
+            runner(
+                common_arguments,
+                env=git_env,
+                timeout=GIT_DISCOVERY_TIMEOUT_SECONDS,
+            ).stdout.strip()
+        )
+        .expanduser()
+        .resolve()
     )
     git_dir_arguments = (
         "git",
@@ -84,7 +103,17 @@ def discover_project(
         "--path-format=absolute",
         "--git-dir",
     )
-    git_dir = Path(runner(git_dir_arguments, env=git_env).stdout.strip()).expanduser().resolve()
+    git_dir = (
+        Path(
+            runner(
+                git_dir_arguments,
+                env=git_env,
+                timeout=GIT_DISCOVERY_TIMEOUT_SECONDS,
+            ).stdout.strip()
+        )
+        .expanduser()
+        .resolve()
+    )
     try:
         git_dir_relative = git_dir.relative_to(git_common_dir)
     except ValueError:

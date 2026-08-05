@@ -40,10 +40,14 @@ Set `BEADS_DIR=/workspace/.beads` in the Compose service so an interactive
 shell uses the worktree-local tracker. The launcher also passes that exact
 value explicitly to each noninteractive `bd` exec; other per-exec commands do
 not receive a launcher-added Beads variable.
-Before the worktree contains a regular `.beads/config.yaml`, reject every
-Beads command before connector, credential lookup, or exec. Only a command
-whose first Beads argument is exactly `init` bypasses this guard, and it still
-receives the explicit worktree-local `BEADS_DIR`.
+The top-level launcher must first discover the project through exactly three
+bounded, token-scrubbed Git queries; a pre-discovery Beads guard is not
+possible because the worktree root is not yet known. After discovery, require
+a real `.beads/` directory and a regular, non-symlink `.beads/config.yaml`, and
+reject every other shape before connector entry, credential lookup, Beads
+exec, or Podman API use. Only a command whose first Beads argument is exactly
+`init` bypasses this guard, and it still receives the explicit worktree-local
+`BEADS_DIR`.
 
 Remove `GH_TOKEN` and `GITHUB_TOKEN` from ordinary Compose, shell, Task, and
 Beads environments and every ordinary host subprocess environment. Redact both

@@ -75,9 +75,9 @@ def test_discover_project_resolves_root_and_common_directory(tmp_path: Path) -> 
         ),
     ]
     assert [kwargs for _, kwargs in calls] == [
-        {"env": {"PATH": "/bin"}},
-        {"env": {"PATH": "/bin"}},
-        {"env": {"PATH": "/bin"}},
+        {"env": {"PATH": "/bin"}, "timeout": 15.0},
+        {"env": {"PATH": "/bin"}, "timeout": 15.0},
+        {"env": {"PATH": "/bin"}, "timeout": 15.0},
     ]
 
 
