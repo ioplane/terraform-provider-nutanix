@@ -827,7 +827,10 @@ while True:
     while process_path.exists() and time.monotonic() < reaping_deadline:
         time.sleep(0.01)
     status_path = process_path / "status"
-    status = status_path.read_text() if status_path.is_file() else ""
+    try:
+        status = status_path.read_text()
+    except FileNotFoundError:
+        status = ""
     assert not process_path.exists(), status
 
 
