@@ -290,16 +290,22 @@ def _validate_m0_children(issues: Mapping[str, Issue]) -> list[str]:
                 )
 
     if len(statuses) == len(REQUIRED_M0_CHILD_IDS):
-        in_progress = [index for index, status in enumerate(statuses) if status == "in_progress"]
-        valid = len(in_progress) == 1
-        if valid:
-            current = in_progress[0]
-            valid = all(status == "closed" for status in statuses[:current]) and all(
-                status in {"open", "blocked"} for status in statuses[current + 1 :]
-            )
+        m0_closed = _text(issues.get("ntnx-m0", {}), "status") == "closed"
+        valid = m0_closed and all(status == "closed" for status in statuses)
+        if not valid and not m0_closed:
+            in_progress = [
+                index for index, status in enumerate(statuses) if status == "in_progress"
+            ]
+            valid = len(in_progress) == 1
+            if valid:
+                current = in_progress[0]
+                valid = all(status == "closed" for status in statuses[:current]) and all(
+                    status in {"open", "blocked"} for status in statuses[current + 1 :]
+                )
         if not valid:
             diagnostics.append(
-                "M0 child statuses must be a closed prefix, one in_progress task, then open tasks"
+                "M0 child statuses must be all closed for a closed M0 or a closed prefix, "
+                "one in_progress task, then open tasks"
             )
     return diagnostics
 

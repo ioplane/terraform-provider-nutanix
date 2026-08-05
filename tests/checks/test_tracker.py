@@ -162,9 +162,36 @@ def test_requires_closed_prefix_current_front_and_open_tail() -> None:
     future["status"] = "closed"
 
     assert (
-        "M0 child statuses must be a closed prefix, one in_progress task, then open tasks"
-        in validation_messages(state)
+        "M0 child statuses must be all closed for a closed M0 or a closed prefix, "
+        "one in_progress task, then open tasks" in validation_messages(state)
     )
+
+
+def test_allows_completed_m0_with_next_phase_task_in_progress() -> None:
+    state = load_fixture()
+    for issue in state["issues"]:
+        if issue["id"] == "ntnx-m0" or str(issue["id"]).startswith("ntnx-m0."):
+            issue["status"] = "closed"
+            if str(issue["id"]).startswith("ntnx-m0."):
+                issue["notes"] = "Verified evidence."
+    next_task = copy.deepcopy(state["issues"][-1])
+    next_task.update(
+        {
+            "id": "ntnx-m1.1",
+            "title": "M1 kernel contract and ARC approval",
+            "status": "in_progress",
+            "priority": 0,
+            "issue_type": "task",
+            "parent": "ntnx-m1",
+            "labels": ["critical-path", "m1", "task-1"],
+            "dependencies": [{"depends_on_id": "ntnx-m1", "type": "parent-child"}],
+        }
+    )
+    state["issues"].append(next_task)
+    state["in_progress"] = [next_task]
+    state["ready"] = [next(issue for issue in state["issues"] if issue["id"] == "ntnx-m1")]
+
+    assert validation_messages(state) == []
 
 
 def test_closed_m0_child_requires_attached_evidence() -> None:

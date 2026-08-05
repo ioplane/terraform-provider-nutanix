@@ -4,7 +4,7 @@
 
 | Phase | Outcome | Status | Blocked by |
 | --- | --- | --- | --- |
-| M0 | Foundation | open | - |
+| M0 | Foundation | closed | - |
 | M1 | Kernel | open | `ntnx-m0` |
 | M2 | Read-only canary | open | `ntnx-m1` |
 | M3 | Foundation resources | open | `ntnx-m2` |
@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m0.7` — GitHub CI, dependency automation, and repository controls
+`ntnx-m1.1` — M1 kernel contract and ARC approval
