@@ -248,6 +248,28 @@ def test_local_database_rejects_tracked_projection_drift(tmp_path: Path) -> None
     assert stderr.getvalue() == "tracker: tracked projection differs from live Beads state\n"
 
 
+def test_local_database_ignores_export_only_comment_payloads(tmp_path: Path) -> None:
+    projection = load_fixture()
+    projection["issues"][0]["comments"] = [
+        {
+            "id": "comment-1",
+            "issue_id": projection["issues"][0]["id"],
+            "author": "tester",
+            "text": "attached acceptance evidence",
+            "created_at": "2026-08-05T00:00:00Z",
+        }
+    ]
+    projection["issues"][0]["comment_count"] = 1
+    write_projection(tmp_path, projection)
+    (tmp_path / ".beads" / "embeddeddolt" / "ntnx" / ".dolt").mkdir(parents=True)
+    live = copy.deepcopy(projection)
+    live["issues"][0].pop("comments")
+
+    state = tracker.load_repository_state(tmp_path, FixtureRunner(live))
+
+    assert len(state.issues) == 19
+
+
 def test_main_reports_valid_issue_count(tmp_path: Path) -> None:
     state = load_fixture()
     write_projection(tmp_path, state)

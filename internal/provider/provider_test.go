@@ -2,14 +2,20 @@ package provider
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	frameworkprovider "github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
+	"github.com/ioplane/terraform-provider-nutanix/internal/transport"
 )
 
 var _ frameworkprovider.Provider = New("compile-test")()
@@ -213,5 +219,168 @@ func TestProviderRegistersNoTypes(t *testing.T) {
 	}
 	if got := len(configured.DataSources(context.Background())); got != 0 {
 		t.Fatalf("data source count = %d, want 0", got)
+	}
+}
+
+func TestConfigureTLSConfigurationError(t *testing.T) {
+	t.Parallel()
+
+	const canary = "invalid-ca-pem-canary-a76dc0e1"
+	model := nullProviderConfig()
+	model.Endpoint = types.StringValue("https://pc.example.test:9440")
+	model.APIKey = types.StringValue("safe-api-key")
+	model.CACertificate = types.StringValue(canary)
+	configured, err := resolveConfig(model, mapEnvironment(nil))
+	if err != nil {
+		t.Fatalf("resolveConfig() error = %v", err)
+	}
+
+	data, err := composeProviderData(configured, "test", "1.15.8")
+	assertConfigurationError(t, err, "ca_certificate", ConfigurationErrorTLS)
+	if data.client != nil {
+		t.Fatal("failed composition returned configured provider data")
+	}
+	if !errors.Is(err, transport.ErrInvalidCAPEM) {
+		t.Fatalf("composition error = %v, want ErrInvalidCAPEM cause", err)
+	}
+	if unwrapped := errors.Unwrap(err); unwrapped != transport.ErrInvalidCAPEM {
+		t.Fatalf("configuration error cause = %v, want only ErrInvalidCAPEM", unwrapped)
+	}
+	assertErrorRenderingsRedact(t, err, canary)
+}
+
+func TestConfigureBuildsClientWithoutNetwork(t *testing.T) {
+	var requestCount atomic.Int64
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requestCount.Add(1)
+	}))
+	t.Cleanup(server.Close)
+
+	tests := []struct {
+		name      string
+		configure func(*providerConfig)
+	}{
+		{
+			name: "API key",
+			configure: func(model *providerConfig) {
+				model.APIKey = types.StringValue("api-key")
+			},
+		},
+		{
+			name: "Basic",
+			configure: func(model *providerConfig) {
+				model.Username = types.StringValue("admin")
+				model.Password = types.StringValue("password")
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			model := nullProviderConfig()
+			model.Endpoint = types.StringValue(server.URL)
+			model.Insecure = types.BoolValue(true)
+			test.configure(&model)
+			configured, err := resolveConfig(model, mapEnvironment(nil))
+			if err != nil {
+				t.Fatalf("resolveConfig() error = %v", err)
+			}
+			data, err := composeProviderData(configured, "1.2.3", "1.15.8")
+			if err != nil {
+				t.Fatalf("composeProviderData() error = %v", err)
+			}
+			if got := requestCount.Load(); got != 0 {
+				t.Fatalf("provider composition made %d network requests, want 0", got)
+			}
+			if data.client == nil {
+				t.Fatal("provider composition returned nil configured client")
+			}
+		})
+	}
+}
+
+func TestConfigureMapsClientConstructorError(t *testing.T) {
+	t.Parallel()
+
+	model := nullProviderConfig()
+	model.Endpoint = types.StringValue("https://pc.example.test:9440")
+	model.APIKey = types.StringValue("safe-api-key")
+	model.Insecure = types.BoolValue(true)
+	configured, err := resolveConfig(model, mapEnvironment(nil))
+	if err != nil {
+		t.Fatalf("resolveConfig() error = %v", err)
+	}
+	configured.requestTimeout = 0
+
+	data, err := composeProviderData(configured, "test", "1.15.8")
+	assertConfigurationError(t, err, "request_timeout_seconds", ConfigurationErrorTimeout)
+	if !errors.Is(err, transport.ErrInvalidClientTimeout) {
+		t.Fatalf("composition error = %v, want ErrInvalidClientTimeout cause", err)
+	}
+	if data.client != nil {
+		t.Fatal("failed client construction returned configured provider data")
+	}
+}
+
+func TestMapClientConfigurationErrorDropsUnknownCause(t *testing.T) {
+	t.Parallel()
+
+	const canary = "unknown-client-constructor-canary-508728b7"
+	cause := errors.New(canary)
+	err := mapClientConfigurationError(cause)
+	assertConfigurationError(t, err, "ca_certificate", ConfigurationErrorTLS)
+	if errors.Is(err, cause) || errors.Unwrap(err) != nil {
+		t.Fatal("unknown client constructor cause remains inspectable")
+	}
+	assertErrorRenderingsRedact(t, err, canary)
+}
+
+func TestConfigureTLSConfigurationErrorProtocolDiagnostic(t *testing.T) {
+	const canary = "invalid-ca-protocol-canary-0dc8c35d"
+	var requestCount atomic.Int64
+	endpoint := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requestCount.Add(1)
+	}))
+	t.Cleanup(endpoint.Close)
+
+	server, err := providerserver.NewProtocol6WithError(New("test")())()
+	if err != nil {
+		t.Fatalf("create Protocol 6 server: %v", err)
+	}
+	ctx := context.Background()
+	schemaResponse, err := server.GetProviderSchema(ctx, &tfprotov6.GetProviderSchemaRequest{})
+	if err != nil {
+		t.Fatalf("GetProviderSchema() error = %v", err)
+	}
+	if diagnosticsHaveErrors(schemaResponse.Diagnostics) {
+		t.Fatalf("GetProviderSchema() diagnostics = %v", schemaResponse.Diagnostics)
+	}
+	config := protocolProviderConfigValues(t, schemaResponse.Provider, map[string]tftypes.Value{
+		"endpoint":       tftypes.NewValue(tftypes.String, endpoint.URL),
+		"api_key":        tftypes.NewValue(tftypes.String, "safe-api-key"),
+		"ca_certificate": tftypes.NewValue(tftypes.String, canary),
+	})
+	response, err := server.ConfigureProvider(ctx, &tfprotov6.ConfigureProviderRequest{Config: &config})
+	if err != nil {
+		t.Fatalf("ConfigureProvider() error = %v", err)
+	}
+	wantPath := tftypes.NewAttributePath().WithAttributeName("ca_certificate")
+	var errorCount int
+	for _, diagnostic := range response.Diagnostics {
+		if strings.Contains(diagnostic.Summary, canary) || strings.Contains(diagnostic.Detail, canary) {
+			t.Fatal("invalid-PEM Configure diagnostic exposes CA canary")
+		}
+		if diagnostic.Severity != tfprotov6.DiagnosticSeverityError {
+			continue
+		}
+		errorCount++
+		if diagnostic.Attribute == nil || !diagnostic.Attribute.Equal(wantPath) {
+			t.Fatalf("Configure diagnostic path = %v, want ca_certificate", diagnostic.Attribute)
+		}
+	}
+	if errorCount != 1 {
+		t.Fatalf("Configure error diagnostic count = %d, want 1", errorCount)
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("failed Configure made %d network requests, want 0", got)
 	}
 }

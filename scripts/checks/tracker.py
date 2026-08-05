@@ -95,6 +95,10 @@ def _projection_issue(value: object, line_number: int) -> Issue:
     if not isinstance(value, dict) or value.get("_type") != "issue":
         raise TrackerInputError(f"invalid tracked projection record at line {line_number}")
     issue = cast(Issue, {key: item for key, item in value.items() if key != "_type"})
+    # `bd export` embeds comment bodies, while `bd list --json` exposes only
+    # `comment_count`. Compare the common issue projection and retain the
+    # count so additions or removals still produce live-state drift.
+    issue.pop("comments", None)
     dependencies = issue.get("dependencies", [])
     parents: list[str] = []
     if isinstance(dependencies, list):

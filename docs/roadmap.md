@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m1.3` — Authentication TLS and origin-bound HTTP client
+`ntnx-m1.4` — Vendor-neutral responses errors redaction and logging

@@ -29,6 +29,8 @@ const (
 	ConfigurationErrorTimeout ConfigurationErrorCode = "invalid_timeout"
 	// ConfigurationErrorTLSConflict identifies mutually exclusive TLS settings.
 	ConfigurationErrorTLSConflict ConfigurationErrorCode = "conflicting_tls_settings"
+	// ConfigurationErrorTLS identifies a failure to construct the configured TLS policy.
+	ConfigurationErrorTLS ConfigurationErrorCode = "invalid_tls_configuration"
 )
 
 // ConfigurationError is a structured, secret-safe provider configuration failure.
@@ -36,6 +38,21 @@ type ConfigurationError struct {
 	Attribute string
 	Code      ConfigurationErrorCode
 	summary   string
+	cause     error
+}
+
+func newConfigurationErrorWithCause(
+	attribute string,
+	code ConfigurationErrorCode,
+	summary string,
+	cause error,
+) *ConfigurationError {
+	return &ConfigurationError{
+		Attribute: attribute,
+		Code:      code,
+		summary:   summary,
+		cause:     cause,
+	}
 }
 
 func newConfigurationError(
@@ -53,6 +70,11 @@ func newConfigurationError(
 // Error returns a stable description that never includes a configured value.
 func (e *ConfigurationError) Error() string {
 	return fmt.Sprintf("invalid provider configuration for %s: %s", e.Attribute, e.summary)
+}
+
+// Unwrap returns an approved stable cause when one exists.
+func (e *ConfigurationError) Unwrap() error {
+	return e.cause
 }
 
 // Format keeps every fmt rendering limited to the same secret-safe description.
