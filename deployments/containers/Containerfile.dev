@@ -9,6 +9,7 @@ ARG TFPLUGINDOCS_VERSION=0.25.0
 ARG GOVULNCHECK_VERSION=1.6.0
 ARG GH_VERSION=2.97.0
 ARG UV_VERSION=0.12.1
+ARG HADOLINT_VERSION=2.15.1
 ARG DEBIAN_SNAPSHOT=20260713T000000Z
 
 ARG OCI_VERSION=0.0.0-dev
@@ -33,6 +34,8 @@ ENV GOTOOLCHAIN=local \
     UV_CACHE_DIR=/opt/uv-cache \
     PATH=/opt/venv/bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 RUN set -eux; \
     sources=/etc/apt/sources.list.d/debian.sources; \
     debian_snapshot="http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}"; \
@@ -47,7 +50,7 @@ RUN set -eux; \
         -e "s|^URIs: http://deb.debian.org/debian-security$|URIs: ${security_snapshot}|" \
         -e '/^Signed-By:/a Check-Valid-Until: no' \
         "${sources}"; \
-    ! grep -Fq 'deb.debian.org' "${sources}"; \
+    if grep -Fq 'deb.debian.org' "${sources}"; then exit 1; fi; \
     test "$(grep -Fc 'Check-Valid-Until: no' "${sources}")" -eq 2
 
 RUN set -eux; \
@@ -62,76 +65,75 @@ RUN set -eux; \
         unzip; \
     find /var/lib/apt/lists -mindepth 1 -delete
 
+COPY deployments/containers/tool-assets.lock /tmp/tool-assets.lock
+
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     case "${arch}" in \
-        amd64) goreleaser_arch="x86_64"; uv_arch="x86_64" ;; \
-        arm64) goreleaser_arch="arm64"; uv_arch="aarch64" ;; \
+        amd64) goreleaser_arch="x86_64"; uv_arch="x86_64"; hadolint_arch="x86_64" ;; \
+        arm64) goreleaser_arch="arm64"; uv_arch="aarch64"; hadolint_arch="arm64" ;; \
         *) echo "unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac; \
     tmp="$(mktemp -d)"; \
     download() { curl --fail --location --silent --show-error --retry 3 --output "$2" "$1"; }; \
-    verify() { \
-        checksum_file="$1"; \
-        asset="$2"; \
-        awk -v asset="${asset}" '$2 == asset { print; found = 1 } END { if (!found) exit 1 }' \
-            "${checksum_file}" > "${tmp}/selected.sha256"; \
-        (cd "${tmp}" && sha256sum --check selected.sha256); \
+    locked_digest() { \
+        awk -v tool="$1" -v version="$2" -v architecture="$3" -v asset="$4" \
+            '$1 == tool && $2 == version && $3 == architecture && $4 == asset \
+             { print $5; matches++ } END { if (matches != 1) exit 1 }' \
+            /tmp/tool-assets.lock; \
+    }; \
+    verify_locked() { \
+        digest="$(locked_digest "$1" "$2" "$3" "$4")"; \
+        printf '%s  %s\n' "${digest}" "${tmp}/$4" | sha256sum --check -; \
     }; \
     task_asset="task_linux_${arch}.tar.gz"; \
     download "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/${task_asset}" "${tmp}/${task_asset}"; \
-    download "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/task_checksums.txt" "${tmp}/task_checksums.txt"; \
-    verify "${tmp}/task_checksums.txt" "${task_asset}"; \
+    verify_locked task "${TASK_VERSION}" "${arch}" "${task_asset}"; \
     mkdir "${tmp}/task"; \
     tar -xzf "${tmp}/${task_asset}" -C "${tmp}/task"; \
     install -m 0755 "${tmp}/task/task" /usr/local/bin/task; \
     beads_asset="beads_${BEADS_VERSION}_linux_${arch}.tar.gz"; \
     download "https://github.com/gastownhall/beads/releases/download/v${BEADS_VERSION}/${beads_asset}" "${tmp}/${beads_asset}"; \
-    download "https://github.com/gastownhall/beads/releases/download/v${BEADS_VERSION}/checksums.txt" "${tmp}/beads_checksums.txt"; \
-    verify "${tmp}/beads_checksums.txt" "${beads_asset}"; \
+    verify_locked beads "${BEADS_VERSION}" "${arch}" "${beads_asset}"; \
     mkdir "${tmp}/beads"; \
     tar -xzf "${tmp}/${beads_asset}" -C "${tmp}/beads"; \
     install -m 0755 "${tmp}/beads/bd" /usr/local/bin/bd; \
     terraform_asset="terraform_${TERRAFORM_VERSION}_linux_${arch}.zip"; \
     download "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/${terraform_asset}" "${tmp}/${terraform_asset}"; \
-    download "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_SHA256SUMS" "${tmp}/terraform_SHA256SUMS"; \
-    verify "${tmp}/terraform_SHA256SUMS" "${terraform_asset}"; \
+    verify_locked terraform "${TERRAFORM_VERSION}" "${arch}" "${terraform_asset}"; \
     unzip -q "${tmp}/${terraform_asset}" -d "${tmp}/terraform"; \
     install -m 0755 "${tmp}/terraform/terraform" /usr/local/bin/terraform; \
     golangci_lint_asset="golangci-lint-${GOLANGCI_LINT_VERSION}-linux-${arch}.tar.gz"; \
     download "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/${golangci_lint_asset}" "${tmp}/${golangci_lint_asset}"; \
-    download "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION}-checksums.txt" "${tmp}/golangci-lint-checksums.txt"; \
-    verify "${tmp}/golangci-lint-checksums.txt" "${golangci_lint_asset}"; \
+    verify_locked golangci-lint "${GOLANGCI_LINT_VERSION}" "${arch}" "${golangci_lint_asset}"; \
     tar -xzf "${tmp}/${golangci_lint_asset}" -C "${tmp}"; \
     install -m 0755 "${tmp}/golangci-lint-${GOLANGCI_LINT_VERSION}-linux-${arch}/golangci-lint" /usr/local/bin/golangci-lint; \
     goreleaser_asset="goreleaser_Linux_${goreleaser_arch}.tar.gz"; \
     download "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/${goreleaser_asset}" "${tmp}/${goreleaser_asset}"; \
-    download "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/checksums.txt" "${tmp}/goreleaser_checksums.txt"; \
-    verify "${tmp}/goreleaser_checksums.txt" "${goreleaser_asset}"; \
+    verify_locked goreleaser "${GORELEASER_VERSION}" "${arch}" "${goreleaser_asset}"; \
     mkdir "${tmp}/goreleaser"; \
     tar -xzf "${tmp}/${goreleaser_asset}" -C "${tmp}/goreleaser"; \
     install -m 0755 "${tmp}/goreleaser/goreleaser" /usr/local/bin/goreleaser; \
     tfplugindocs_asset="tfplugindocs_${TFPLUGINDOCS_VERSION}_linux_${arch}.zip"; \
     download "https://github.com/hashicorp/terraform-plugin-docs/releases/download/v${TFPLUGINDOCS_VERSION}/${tfplugindocs_asset}" "${tmp}/${tfplugindocs_asset}"; \
-    download "https://github.com/hashicorp/terraform-plugin-docs/releases/download/v${TFPLUGINDOCS_VERSION}/tfplugindocs_${TFPLUGINDOCS_VERSION}_SHA256SUMS" "${tmp}/tfplugindocs_SHA256SUMS"; \
-    verify "${tmp}/tfplugindocs_SHA256SUMS" "${tfplugindocs_asset}"; \
+    verify_locked tfplugindocs "${TFPLUGINDOCS_VERSION}" "${arch}" "${tfplugindocs_asset}"; \
     unzip -q "${tmp}/${tfplugindocs_asset}" -d "${tmp}/tfplugindocs"; \
     install -m 0755 "${tmp}/tfplugindocs/tfplugindocs" /usr/local/bin/tfplugindocs; \
     gh_asset="gh_${GH_VERSION}_linux_${arch}.tar.gz"; \
     download "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${gh_asset}" "${tmp}/${gh_asset}"; \
-    download "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_checksums.txt" "${tmp}/gh_checksums.txt"; \
-    verify "${tmp}/gh_checksums.txt" "${gh_asset}"; \
+    verify_locked gh "${GH_VERSION}" "${arch}" "${gh_asset}"; \
     tar -xzf "${tmp}/${gh_asset}" -C "${tmp}"; \
     install -m 0755 "${tmp}/gh_${GH_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh; \
     uv_asset="uv-${uv_arch}-unknown-linux-gnu.tar.gz"; \
     download "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${uv_asset}" "${tmp}/${uv_asset}"; \
-    download "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${uv_asset}.sha256" "${tmp}/${uv_asset}.sha256"; \
-    uv_digest="$(awk 'NR == 1 { print $1 }' "${tmp}/${uv_asset}.sha256")"; \
-    printf '%s  %s\n' "${uv_digest}" "${uv_asset}" > "${tmp}/uv_selected.sha256"; \
-    (cd "${tmp}" && sha256sum --check uv_selected.sha256); \
+    verify_locked uv "${UV_VERSION}" "${arch}" "${uv_asset}"; \
     tar -xzf "${tmp}/${uv_asset}" -C "${tmp}"; \
     install -m 0755 "${tmp}/uv-${uv_arch}-unknown-linux-gnu/uv" /usr/local/bin/uv; \
     install -m 0755 "${tmp}/uv-${uv_arch}-unknown-linux-gnu/uvx" /usr/local/bin/uvx; \
+    hadolint_asset="hadolint-linux-${hadolint_arch}"; \
+    download "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/${hadolint_asset}" "${tmp}/${hadolint_asset}"; \
+    verify_locked hadolint "${HADOLINT_VERSION}" "${arch}" "${hadolint_asset}"; \
+    install -m 0755 "${tmp}/${hadolint_asset}" /usr/local/bin/hadolint; \
     find "${tmp}" -mindepth 1 -delete; \
     rmdir "${tmp}"
 

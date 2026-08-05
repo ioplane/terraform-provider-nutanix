@@ -198,6 +198,7 @@ def test_up_uses_fixed_compose_command_metadata_and_waits_healthy(tmp_path: Path
         "up",
         "--detach",
         "--build",
+        "--force-recreate",
     )
     compose_env_value = compose_call[1]["env"]
     assert isinstance(compose_env_value, dict)

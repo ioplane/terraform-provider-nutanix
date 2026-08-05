@@ -13,7 +13,34 @@ def valid_pin_repository(root: Path) -> None:
         f"ARG {name}={version}" for name, version in pins.EXPECTED_TOOL_ARGUMENTS.items()
     )
     container.write_text(
-        f"FROM docker.io/library/golang:1.26-trixie@{pins.EXPECTED_BASE_DIGEST}\n{arguments}\n"
+        f"FROM docker.io/library/golang:1.26-trixie@{pins.EXPECTED_BASE_DIGEST}\n"
+        f"{arguments}\n"
+        "ARG OCI_VERSION=0.0.0-dev\n"
+        "ARG OCI_REVISION=0000000000000000000000000000000000000000\n"
+        "ARG OCI_CREATED=1970-01-01T00:00:00Z\n"
+        "LABEL "
+        + " \\\n      ".join(
+            f'{name}="{value}"' for name, value in pins.EXPECTED_OCI_LABELS.items()
+        )
+        + "\n"
+        "COPY deployments/containers/tool-assets.lock /tmp/tool-assets.lock\n"
+        "RUN sha256sum --check /tmp/tool-assets.lock; \\\n"
+        + "; \\\n".join(
+            f'download "{url}" "${{tmp}}/asset"' for url in sorted(pins.EXPECTED_DOWNLOAD_URLS)
+        )
+        + "; \\\n"
+        + "; \\\n".join(sorted(pins.EXPECTED_VERIFY_CALLS))
+        + "\n"
+    )
+    lock = root / pins.TOOL_ASSET_LOCK
+    lock.write_text(
+        "# tool version architecture asset sha256\n"
+        + "".join(
+            f"{tool} {version} {architecture} {asset} {digest}\n"
+            for (tool, version, architecture), (asset, digest) in sorted(
+                pins.EXPECTED_TOOL_ASSETS.items()
+            )
+        )
     )
 
     compose = root / pins.COMPOSE_FILE
@@ -150,6 +177,40 @@ def test_rejects_long_syntax_socket_mount(tmp_path: Path) -> None:
     )
 
     assert "Compose must not mount a Podman or Docker socket" in pins.validate(tmp_path)
+
+
+def test_accepts_required_environment_expansion_in_volume_source(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    compose = tmp_path / pins.COMPOSE_FILE
+    compose.write_text(
+        "services:\n"
+        "  dev:\n"
+        "    volumes:\n"
+        "      - ${NUTANIX_GIT_COMMON_DIR:?required}:/git-metadata/.git:z\n"
+    )
+
+    assert pins._compose_diagnostics(tmp_path) == []
+
+
+def test_rejects_privileged_host_namespaces_and_socket_directory_mount(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    compose = tmp_path / pins.COMPOSE_FILE
+    compose.write_text(
+        "services:\n"
+        "  dev:\n"
+        "    privileged: true\n"
+        "    pid: host\n"
+        "    network_mode: host\n"
+        "    volumes:\n"
+        "      - /run/podman:/run/podman\n"
+    )
+
+    diagnostics = pins.validate(tmp_path)
+
+    assert "Compose privileged execution is forbidden" in diagnostics
+    assert "Compose host pid namespace is forbidden" in diagnostics
+    assert "Compose host network namespace is forbidden" in diagnostics
+    assert "Compose runtime socket directory mount is forbidden" in diagnostics
 
 
 def test_rejects_floating_action_and_ci_marker_drift(tmp_path: Path) -> None:
@@ -301,3 +362,40 @@ def test_ci_policy_cannot_be_spoofed_by_run_block(tmp_path: Path) -> None:
     assert "CI action pin differs: astral-sh/setup-uv" in diagnostics
     assert "CI Podman service step differs" in diagnostics
     assert "CI host development command is forbidden: env go test ./..." in diagnostics
+
+
+def test_required_ci_gate_cannot_be_conditionally_skipped_or_ignored(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    content = workflow.read_text()
+    content = content.replace(
+        "      - run: ./dev task all\n",
+        "      - if: false\n        continue-on-error: true\n        run: ./dev task all\n",
+    )
+    workflow.write_text(content)
+
+    diagnostics = pins.validate(tmp_path)
+
+    assert "CI complete foundation gate must be unconditional" in diagnostics
+    assert "CI complete foundation gate must fail the job" in diagnostics
+
+
+def test_requires_oci_labels_official_downloads_and_locked_verification(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    container = tmp_path / pins.CONTAINERFILE
+    content = container.read_text()
+    content = content.replace(
+        "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/${task_asset}",
+        "https://attacker.invalid/task",
+    )
+    content = content.replace(
+        'verify_locked task "${TASK_VERSION}" "${arch}" "${task_asset}"', "true"
+    )
+    content = content.replace("org.opencontainers.image.description=", "invalid.label=")
+    container.write_text(content)
+
+    diagnostics = pins.validate(tmp_path)
+
+    assert "development OCI label set differs" in diagnostics
+    assert "tool download origin differs: task" in diagnostics
+    assert "repository-owned tool asset verification is missing: task" in diagnostics

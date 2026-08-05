@@ -168,7 +168,13 @@ class Launcher:
     def up(self) -> int:
         """Build, start, and verify the exact Compose service."""
         result = self.runner(
-            (*self._compose_arguments(), "up", "--detach", "--build"),
+            (
+                *self._compose_arguments(),
+                "up",
+                "--detach",
+                "--build",
+                "--force-recreate",
+            ),
             cwd=self.project.root,
             env=self._compose_environment(),
             timeout=COMPOSE_UP_TIMEOUT_SECONDS,

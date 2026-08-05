@@ -12,7 +12,9 @@ dependencies = [
 dev = [
     "pytest==9.1.1",
     "ruff==0.16.1",
+    "rumdl==0.2.50",
     "ty==0.0.66",
+    "yamllint==1.38.0",
 ]
 
 [tool.uv]
@@ -40,3 +42,17 @@ strict-equality-semantics = true
 
 [tool.ty.src]
 include = ["scripts", "tests"]
+
+[tool.rumdl]
+disable = ["MD013", "MD076"]
+line-length = 100
+respect-gitignore = true
+
+[tool.rumdl.MD013]
+code-blocks = false
+tables = false
+
+[tool.rumdl.per-file-ignores]
+".github/pull_request_template.md" = ["MD041"]
+"CLAUDE.md" = ["MD041"]
+"CODEX.md" = ["MD041"]

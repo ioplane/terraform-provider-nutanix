@@ -36,8 +36,10 @@ tasks:
         python -c 'from importlib.metadata import version; print("podman-compose=" + version("podman-compose"))'
         emit uv uv --version
         emit ruff ruff --version
+        emit rumdl rumdl --version
         emit ty ty --version
         emit pytest pytest --version
+        emit yamllint yamllint --version
         emit golangci-lint golangci-lint version
         emit goreleaser goreleaser --version
         emit tfplugindocs tfplugindocs --version
@@ -45,6 +47,14 @@ tasks:
         test -n "${value}"
         printf 'govulncheck=%s\n' "${value}"
         emit gh gh --version
+        emit hadolint hadolint --version
+
+  python:lock:
+    desc: Resolve the exact Python development dependency lock
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - uv lock
 
   python:format:
     desc: Format Python sources and tests
@@ -160,11 +170,32 @@ tasks:
       - python -m scripts.checks.tool_versions
 
   docs:check:
-    desc: Generate Framework docs from an offline packaged schema and reject drift
+    desc: Lint tracked docs, validate internal links, and reject generated drift
     deps: [_container]
     dir: /workspace
     cmds:
+      - >-
+        git ls-files -z -- '*.md' '*.markdown' |
+        xargs -0 --no-run-if-empty rumdl check --color never
+      - >-
+        git ls-files -z -- '*.yml' '*.yaml' |
+        xargs -0 --no-run-if-empty yamllint --strict --config-file .yamllint.yml
+      - python -m scripts.checks.docs_links
       - SOURCE_DATE_EPOCH=1700000000 python -m scripts.checks.docs
+
+  oci:check:
+    desc: Lint the Containerfile and validate the complete Compose model
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - hadolint --config .hadolint.yaml deployments/containers/Containerfile.dev
+      - >-
+        NUTANIX_GIT_COMMON_DIR=/tmp/nutanix-compose-validation
+        NUTANIX_GIT_DIR_RELATIVE=worktrees/validation
+        podman-compose
+        --dry-run
+        -f deployments/compose/compose.dev.yml
+        config >/dev/null
 
   release:check:
     desc: Validate the GoReleaser release-shape configuration
@@ -322,6 +353,7 @@ tasks:
       - task: go:test:race
       - task: go:vuln
       - task: docs:check
+      - task: oci:check
       - task: pins:check
       - task: tools:check
       - task: release:check

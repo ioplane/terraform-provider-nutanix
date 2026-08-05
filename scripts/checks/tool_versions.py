@@ -18,13 +18,16 @@ EXPECTED_VERSIONS = {
     "podman-compose": "1.6.0",
     "uv": "0.12.1",
     "ruff": "0.16.1",
+    "rumdl": "0.2.50",
     "ty": "0.0.66",
     "pytest": "9.1.1",
+    "yamllint": "1.38.0",
     "golangci-lint": "2.12.2",
     "goreleaser": "2.17.1",
     "tfplugindocs": "0.25.0",
     "govulncheck": "1.6.0",
     "gh": "2.97.0",
+    "hadolint": "2.15.1",
 }
 
 Runner = Callable[[Sequence[str]], str]

@@ -1,0 +1,18 @@
+failure-threshold: warning
+ignored:
+  # Debian Snapshot fixes the complete package repository at an immutable time.
+  - DL3008
+  # The image clears apt metadata with find(1) -delete instead of a shell glob.
+  - DL3009
+label-schema:
+  org.opencontainers.image.base.digest: text
+  org.opencontainers.image.base.name: text
+  org.opencontainers.image.created: text
+  org.opencontainers.image.description: text
+  org.opencontainers.image.licenses: spdx
+  # Build-time variables are validated by the repository policy checker.
+  org.opencontainers.image.revision: text
+  org.opencontainers.image.source: url
+  org.opencontainers.image.title: text
+  org.opencontainers.image.version: text
+strict-labels: true

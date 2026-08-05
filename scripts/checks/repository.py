@@ -11,6 +11,8 @@ from typing import TextIO
 from scripts.automation.process import CommandError, run
 
 REQUIRED_FILES = (
+    ".hadolint.yaml",
+    ".yamllint.yml",
     ".goreleaser.yml",
     "AGENTS.md",
     "CHANGELOG.md",
@@ -25,6 +27,7 @@ REQUIRED_FILES = (
     "docs/architecture.md",
     "docs/contract.md",
     "docs/index.md",
+    "deployments/containers/tool-assets.lock",
     "go.mod",
     "go.sum",
 )
