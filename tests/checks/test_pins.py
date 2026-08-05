@@ -521,6 +521,25 @@ def test_ci_rejects_skipped_job_dependency(tmp_path: Path) -> None:
     assert "CI foundation job model differs" in diagnostics
 
 
+def test_ci_rejects_additional_workflow(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    extra = tmp_path / ".github" / "workflows" / "extra.yml"
+    extra.write_text(
+        "name: Bypass\n"
+        "on: pull_request\n"
+        "permissions:\n"
+        "  contents: write\n"
+        "jobs:\n"
+        "  bypass:\n"
+        "    name: Foundation\n"
+        "    runs-on: ubuntu-24.04\n"
+        "    steps:\n"
+        "      - run: true\n"
+    )
+
+    assert "GitHub workflow file set differs" in pins.validate(tmp_path)
+
+
 def test_requires_oci_labels_official_downloads_and_locked_verification(tmp_path: Path) -> None:
     valid_pin_repository(tmp_path)
     container = tmp_path / pins.CONTAINERFILE

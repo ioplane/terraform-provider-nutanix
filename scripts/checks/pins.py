@@ -506,7 +506,10 @@ def _workflow_diagnostics(root: Path, arguments: dict[str, str]) -> list[str]:
     workflow_root = root / ".github" / "workflows"
     if not workflow_root.is_dir():
         return diagnostics
-    for path in sorted((*workflow_root.glob("*.yml"), *workflow_root.glob("*.yaml"))):
+    workflow_paths = sorted((*workflow_root.glob("*.yml"), *workflow_root.glob("*.yaml")))
+    if [path.relative_to(root) for path in workflow_paths] != [CI_FILE]:
+        diagnostics.append("GitHub workflow file set differs")
+    for path in workflow_paths:
         relative = path.relative_to(root).as_posix()
         text = path.read_text()
         for reference in _ACTION.findall(text):
