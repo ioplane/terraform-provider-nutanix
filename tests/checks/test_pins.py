@@ -11,29 +11,7 @@ from scripts.checks import pins
 def valid_pin_repository(root: Path) -> None:
     container = root / pins.CONTAINERFILE
     container.parent.mkdir(parents=True)
-    arguments = "\n".join(
-        f"ARG {name}={version}" for name, version in pins.EXPECTED_TOOL_ARGUMENTS.items()
-    )
-    container.write_text(
-        f"FROM docker.io/library/golang:1.26-trixie@{pins.EXPECTED_BASE_DIGEST}\n"
-        f"{arguments}\n"
-        "ARG OCI_VERSION=0.0.0-dev\n"
-        "ARG OCI_REVISION=0000000000000000000000000000000000000000\n"
-        "ARG OCI_CREATED=1970-01-01T00:00:00Z\n"
-        "LABEL "
-        + " \\\n      ".join(
-            f'{name}="{value}"' for name, value in pins.EXPECTED_OCI_LABELS.items()
-        )
-        + "\n"
-        "COPY deployments/containers/tool-assets.lock /tmp/tool-assets.lock\n"
-        "RUN sha256sum --check /tmp/tool-assets.lock; \\\n"
-        + "; \\\n".join(
-            f'download "{url}" "${{tmp}}/asset"' for url in sorted(pins.EXPECTED_DOWNLOAD_URLS)
-        )
-        + "; \\\n"
-        + "; \\\n".join(sorted(pins.EXPECTED_VERIFY_CALLS))
-        + "\n"
-    )
+    container.write_bytes(pins.CONTAINERFILE.read_bytes())
     lock = root / pins.TOOL_ASSET_LOCK
     lock.write_text(
         "# tool version architecture asset sha256\n"
@@ -559,3 +537,18 @@ def test_requires_oci_labels_official_downloads_and_locked_verification(tmp_path
     assert "development OCI label set differs" in diagnostics
     assert "tool download origin differs: task" in diagnostics
     assert "repository-owned tool asset verification is missing: task" in diagnostics
+
+
+def test_rejects_noop_tool_verifier_with_comment_spoof(tmp_path: Path) -> None:
+    valid_pin_repository(tmp_path)
+    container = tmp_path / pins.CONTAINERFILE
+    content = container.read_text()
+    content = content.replace(
+        '        sha256sum --check "${tmp}/selected.sha256"; \\\n',
+        "        true; \\\n        # sha256sum --check /tmp/tool-assets.lock\\\n",
+    )
+    container.write_text(content)
+
+    diagnostics = pins.validate(tmp_path)
+
+    assert "development Containerfile digest differs" in diagnostics

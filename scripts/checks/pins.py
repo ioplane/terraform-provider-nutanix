@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shlex
@@ -20,6 +21,7 @@ DEPENDABOT_FILE = Path(".github/dependabot.yml")
 CODEOWNERS_FILE = Path(".github/CODEOWNERS")
 PULL_REQUEST_TEMPLATE_FILE = Path(".github/pull_request_template.md")
 EXPECTED_BASE_DIGEST = "sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7"
+EXPECTED_CONTAINERFILE_SHA256 = "c549f446e252fb9b3ad5b928c8a5991831bc585f1bd4eea01d4392b5a39c1081"
 EXPECTED_TOOL_ARGUMENTS = {
     "TASK_VERSION": "3.52.0",
     "BEADS_VERSION": "1.1.2",
@@ -366,6 +368,8 @@ def _container_diagnostics(root: Path) -> tuple[list[str], dict[str, str]]:
         return [f"pin file missing: {CONTAINERFILE.as_posix()}"], {}
     text = path.read_text()
     diagnostics: list[str] = []
+    if hashlib.sha256(path.read_bytes()).hexdigest() != EXPECTED_CONTAINERFILE_SHA256:
+        diagnostics.append("development Containerfile digest differs")
     from_entries = _FROM.findall(text)
     expected_base = f"docker.io/library/golang:1.26-trixie@{EXPECTED_BASE_DIGEST}"
     if not from_entries or from_entries[0] != expected_base:
