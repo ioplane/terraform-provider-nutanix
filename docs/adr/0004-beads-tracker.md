@@ -37,6 +37,14 @@ connector, or call the Podman API for a rejected command. Permit only a command
 whose first Beads argument is exactly `init`; this exception is what creates
 the anchored database. Options placed before `init` do not bypass the guard.
 
+As a defense-in-depth boundary, mask `/git-common/.beads` with an empty
+mode-`0700` tmpfs using `notmpcopyup` inside the development container. The
+option is mandatory because Podman's default tmpfs copy-up would populate the
+child mount from the ambient host fallback. The parent Git metadata bind
+remains mounted, but the pinned Beads binary cannot observe the fallback
+through it. This mount does not delete, migrate, or modify host state; the
+canonical container-visible database can exist only at `/workspace/.beads`.
+
 Keep exactly one critical-path task `in_progress`. Close a task only after its
 acceptance evidence is attached.
 

@@ -899,10 +899,11 @@ def test_shell_resolves_healthy_exact_name_then_execs_interactive_podman(
     assert exit_code == 0
 
 
-def test_compose_mounts_only_selected_git_metadata_without_podman_socket() -> None:
+def test_compose_masks_host_beads_fallback_without_expanding_privileges() -> None:
     compose = yaml.safe_load(Path("deployments/compose/compose.dev.yml").read_text())
     service = compose["services"]["dev"]
     assert "${NUTANIX_GIT_COMMON_DIR:?required}:/git-common:z" in service["volumes"]
+    assert service["tmpfs"] == ["/git-common/.beads:rw,mode=0700,notmpcopyup"]
     assert service["environment"] == {
         "BEADS_DIR": "/workspace/.beads",
         "GIT_COMMON_DIR": "/git-common",

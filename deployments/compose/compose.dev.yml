@@ -21,6 +21,8 @@ services:
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
       - uv-cache:/opt/uv-cache
+    tmpfs:
+      - /git-common/.beads:rw,mode=0700,notmpcopyup
     healthcheck:
       test:
         - CMD-SHELL

@@ -44,6 +44,13 @@ and `./dev shell` inherits it from the Compose service. Database subtrees under
 `.beads/` remain ignored; only `.beads/config.yaml` and
 `.beads/issues.jsonl` are tracked projections. The launcher does not discover,
 migrate, or remove a database created at an earlier fallback location.
+The Git common-directory bind remains available at `/git-common`, but Compose
+masks its `.beads` child with an empty mode-`0700` tmpfs. This makes an ambient
+host fallback database invisible to the pinned Beads process while leaving the
+host data untouched. The mount uses `notmpcopyup`; without it, Podman would
+populate the new tmpfs from the masked host directory. The only usable tracker
+state in the toolbox is the worktree-owned `/workspace/.beads`; no fallback
+database is deleted or migrated.
 The launcher entrypoint first resolves the worktree with exactly three bounded,
 token-scrubbed Git queries. After that mandatory discovery, it requires a real
 `.beads/` directory and a regular, non-symlink `.beads/config.yaml`; otherwise

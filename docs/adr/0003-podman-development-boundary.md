@@ -49,6 +49,13 @@ exec, or Podman API use. Only a command whose first Beads argument is exactly
 `init` bypasses this guard, and it still receives the explicit worktree-local
 `BEADS_DIR`.
 
+Keep the `/git-common` bind required by Git, but mount an empty mode-`0700`
+tmpfs with `notmpcopyup` at its `/git-common/.beads` child. The option prevents
+Podman from copying the masked host directory into the new tmpfs. The child
+mount therefore hides any ambient host fallback from processes in the toolbox
+without deleting, migrating, or modifying the host database. Beads state
+inside the toolbox is limited to `/workspace/.beads`.
+
 Remove `GH_TOKEN` and `GITHUB_TOKEN` from ordinary Compose, shell, Task, and
 Beads environments and every ordinary host subprocess environment. Redact both
 known nonempty token values from captured host-command output. Only remote
