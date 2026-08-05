@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m0.5` — Empty Framework provider and protocol 6 handshake
+`ntnx-m0.6` — Repository gates, generated docs, and deterministic package
