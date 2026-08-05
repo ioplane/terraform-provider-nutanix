@@ -36,6 +36,11 @@ relative `GIT_DIR` explicitly. Reject a resolved Git directory outside the
 common directory. This preserves real Git behavior in both primary and linked
 worktrees without mounting a Podman control socket.
 
+Set `BEADS_DIR=/workspace/.beads` in the Compose service so an interactive
+shell uses the worktree-local tracker. The launcher also passes that exact
+value explicitly to each noninteractive `bd` exec; other per-exec commands do
+not receive a launcher-added Beads variable.
+
 Remove `GH_TOKEN` and `GITHUB_TOKEN` from ordinary Compose, shell, Task, and
 Beads environments and every ordinary host subprocess environment. Redact both
 known nonempty token values from captured host-command output. Only remote

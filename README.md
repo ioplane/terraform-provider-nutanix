@@ -35,6 +35,15 @@ and mounts its Git common directory at `/git-common`. Explicit `GIT_DIR`,
 `GIT_COMMON_DIR`, and `GIT_WORK_TREE` values keep Git commands such as
 `git status` functional in linked worktrees.
 
+Beads is anchored explicitly at `BEADS_DIR=/workspace/.beads`. This keeps the
+embedded Dolt database local to the mounted worktree instead of letting Beads
+derive a fallback database below `/git-common` when that mount does not have a
+`.git` basename. Every `./dev beads` execution receives the anchor directly,
+and `./dev shell` inherits it from the Compose service. Database subtrees under
+`.beads/` remain ignored; only `.beads/config.yaml` and
+`.beads/issues.jsonl` are tracked projections. The launcher does not discover,
+migrate, or remove a database created at an earlier fallback location.
+
 The development container does not receive the Podman socket. Lifecycle,
 readiness, status, and noninteractive commands are bounded host operations;
 only `./dev shell` uses an interactive host `podman exec`. GitHub tokens are

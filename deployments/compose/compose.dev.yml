@@ -11,6 +11,7 @@ services:
     working_dir: /workspace
     command: ["sleep", "infinity"]
     environment:
+      BEADS_DIR: /workspace/.beads
       GIT_COMMON_DIR: /git-common
       GIT_DIR: /git-common/${NUTANIX_GIT_DIR_RELATIVE}
       GIT_WORK_TREE: /workspace

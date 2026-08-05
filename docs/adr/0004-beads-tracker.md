@@ -19,6 +19,16 @@ tracker. Synchronize the Dolt database through the Git origin under
 the generated roadmap as review and human-readable projections only, never as
 canonical task state.
 
+Anchor Beads to `BEADS_DIR=/workspace/.beads` in the development toolbox. The
+explicit anchor is required because linked worktrees expose their Git common
+directory at `/git-common`; Beads 1.1.2 otherwise treats that non-`.git`
+basename as a fallback location and can place the canonical database outside
+the mounted worktree. Worktree-local embedded Dolt state keeps each isolated
+Compose/worktree environment aligned with its checkout. Ignore database
+subtrees beneath `.beads/`, while tracking `.beads/config.yaml` and
+`.beads/issues.jsonl`. Do not automatically discover, migrate, or delete a
+database from a previous fallback location.
+
 Keep exactly one critical-path task `in_progress`. Close a task only after its
 acceptance evidence is attached.
 

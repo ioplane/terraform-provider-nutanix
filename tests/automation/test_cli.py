@@ -255,7 +255,10 @@ def test_noninteractive_commands_wait_and_forward_exact_arguments_without_token(
     expected_timeout = (
         cli.TASK_COMMAND_TIMEOUT_SECONDS if command == "task" else cli.BEADS_COMMAND_TIMEOUT_SECONDS
     )
-    assert api.exec_calls == [(expected, {"environment": {}, "timeout": expected_timeout})]
+    expected_environment = {} if command == "task" else {"BEADS_DIR": "/workspace/.beads"}
+    assert api.exec_calls == [
+        (expected, {"environment": expected_environment, "timeout": expected_timeout})
+    ]
     assert exit_code == 0
     assert stdout == b"exec stdout\n"
     assert stderr == b"exec stderr\n"
@@ -292,6 +295,10 @@ def test_remote_beads_uses_precedence_per_exec_and_redacts_streams(
     )
 
     injected = {"GH_TOKEN": expected_token}
+    beads_environment = {
+        "BEADS_DIR": "/workspace/.beads",
+        "GH_TOKEN": expected_token,
+    }
     assert api.exec_calls == [
         (
             ("gh", "auth", "setup-git"),
@@ -303,7 +310,7 @@ def test_remote_beads_uses_precedence_per_exec_and_redacts_streams(
         (
             ("bd", "dolt", "push", "--force-with-lease"),
             {
-                "environment": injected,
+                "environment": beads_environment,
                 "timeout": cli.REMOTE_BEADS_TIMEOUT_SECONDS,
             },
         ),
@@ -335,6 +342,13 @@ def test_remote_beads_falls_back_to_bounded_host_gh_token(tmp_path: Path) -> Non
     assert api.exec_calls[0][1] == {
         "environment": {"GH_TOKEN": "token-from-gh"},
         "timeout": cli.REMOTE_SETUP_TIMEOUT_SECONDS,
+    }
+    assert api.exec_calls[1][1] == {
+        "environment": {
+            "BEADS_DIR": "/workspace/.beads",
+            "GH_TOKEN": "token-from-gh",
+        },
+        "timeout": cli.REMOTE_BEADS_TIMEOUT_SECONDS,
     }
     assert exit_code == 0
 
@@ -528,6 +542,7 @@ def test_compose_mounts_only_selected_git_metadata_without_podman_socket() -> No
     service = compose["services"]["dev"]
     assert "${NUTANIX_GIT_COMMON_DIR:?required}:/git-common:z" in service["volumes"]
     assert service["environment"] == {
+        "BEADS_DIR": "/workspace/.beads",
         "GIT_COMMON_DIR": "/git-common",
         "GIT_DIR": "/git-common/${NUTANIX_GIT_DIR_RELATIVE}",
         "GIT_WORK_TREE": "/workspace",

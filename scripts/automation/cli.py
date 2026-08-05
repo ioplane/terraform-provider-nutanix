@@ -22,6 +22,7 @@ from scripts.automation.project import Project, ProjectError, discover_project
 
 SERVICE = "dev"
 COMPOSE_FILE = Path("deployments/compose/compose.dev.yml")
+BEADS_DIR = "/workspace/.beads"
 COMPOSE_UP_TIMEOUT_SECONDS = 600.0
 COMPOSE_DOWN_TIMEOUT_SECONDS = 120.0
 HEALTH_TIMEOUT_SECONDS = 180.0
@@ -208,6 +209,7 @@ class Launcher:
         """Run an exact Task argument vector through the Podman API."""
         return self._exec(
             ("task", *self._required_arguments("task", arguments)),
+            environment={},
             timeout=TASK_COMMAND_TIMEOUT_SECONDS,
         )
 
@@ -215,16 +217,21 @@ class Launcher:
         """Run bd, injecting a short-lived token only for remote Dolt operations."""
         normalized = self._required_arguments("beads", arguments)
         if tuple(normalized[:2]) not in {("dolt", "push"), ("dolt", "pull")}:
-            return self._exec(("bd", *normalized), timeout=BEADS_COMMAND_TIMEOUT_SECONDS)
+            return self._exec(
+                ("bd", *normalized),
+                environment={"BEADS_DIR": BEADS_DIR},
+                timeout=BEADS_COMMAND_TIMEOUT_SECONDS,
+            )
 
         token = self._github_token()
-        environment = {"GH_TOKEN": token}
+        token_environment = {"GH_TOKEN": token}
+        beads_environment = {"BEADS_DIR": BEADS_DIR, **token_environment}
         secrets = (*self.secrets, token.encode())
         with self.connector(self.project.name, SERVICE) as api:
             api.wait_until_healthy(timeout=HEALTH_TIMEOUT_SECONDS)
             setup = api.exec(
                 ("gh", "auth", "setup-git"),
-                environment=environment,
+                environment=token_environment,
                 timeout=REMOTE_SETUP_TIMEOUT_SECONDS,
             )
             _emit_exec(setup, self.stdout, self.stderr, secrets=secrets)
@@ -232,16 +239,22 @@ class Launcher:
                 return setup.exit_code
             result = api.exec(
                 ("bd", *normalized),
-                environment=environment,
+                environment=beads_environment,
                 timeout=REMOTE_BEADS_TIMEOUT_SECONDS,
             )
         _emit_exec(result, self.stdout, self.stderr, secrets=secrets)
         return result.exit_code
 
-    def _exec(self, arguments: Sequence[str], *, timeout: float) -> int:
+    def _exec(
+        self,
+        arguments: Sequence[str],
+        *,
+        environment: Mapping[str, str],
+        timeout: float,
+    ) -> int:
         with self.connector(self.project.name, SERVICE) as api:
             api.wait_until_healthy(timeout=HEALTH_TIMEOUT_SECONDS)
-            result = api.exec(arguments, environment={}, timeout=timeout)
+            result = api.exec(arguments, environment=environment, timeout=timeout)
         _emit_exec(result, self.stdout, self.stderr, secrets=self.secrets)
         return result.exit_code
 
