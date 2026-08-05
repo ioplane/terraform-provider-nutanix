@@ -31,10 +31,10 @@ inside the development container.
 
 Derive the Compose project name from the resolved Git common directory and
 worktree root. Mount the worktree at `/workspace` and its Git common directory
-at `/git-common`, then set `GIT_WORK_TREE`, `GIT_COMMON_DIR`, and the safely
-relative `GIT_DIR` explicitly. Reject a resolved Git directory outside the
-common directory. This preserves real Git behavior in both primary and linked
-worktrees without mounting a Podman control socket.
+at `/git-metadata/.git`, then set `GIT_WORK_TREE`, `GIT_COMMON_DIR`, and the
+safely relative `GIT_DIR` explicitly. Reject a resolved Git directory outside
+the common directory. This preserves real Git behavior in both primary and
+linked worktrees without mounting a Podman control socket.
 
 Set `BEADS_DIR=/workspace/.beads` in the Compose service so an interactive
 shell uses the worktree-local tracker. The launcher also passes that exact
@@ -49,12 +49,14 @@ exec, or Podman API use. Only a command whose first Beads argument is exactly
 `init` bypasses this guard, and it still receives the explicit worktree-local
 `BEADS_DIR`.
 
-Keep the `/git-common` bind required by Git, but mount an empty mode-`0700`
-tmpfs with `notmpcopyup` at its `/git-common/.beads` child. The option prevents
-Podman from copying the masked host directory into the new tmpfs. The child
-mount therefore hides any ambient host fallback from processes in the toolbox
-without deleting, migrating, or modifying the host database. Beads state
-inside the toolbox is limited to `/workspace/.beads`.
+The `.git` basename is an intentional resolver boundary. Beads 1.1.2 derives
+its automatic common-directory fallback as the sibling
+`/git-metadata/.beads`, which remains in the container overlay. A host fallback
+inside the required bind is still physically reachable at
+`/git-metadata/.git/.beads` by arbitrary toolbox processes, but the pinned
+Beads resolver and launcher never select it as canonical state or mutate it
+automatically. Do not add a nested mount: container runtimes may create its
+host-side mountpoint while applying mounts sequentially.
 
 Remove `GH_TOKEN` and `GITHUB_TOKEN` from ordinary Compose, shell, Task, and
 Beads environments and every ordinary host subprocess environment. Redact both

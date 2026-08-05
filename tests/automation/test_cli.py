@@ -648,9 +648,10 @@ def test_remote_beads_reports_missing_credentials_without_leaking_gh_output(
     assert api.exec_calls == []
 
 
-def test_real_beads_fallback_is_blocked_before_container_exec(tmp_path: Path) -> None:
+def test_real_beads_dot_git_common_selects_only_sibling_fallback(tmp_path: Path) -> None:
     cli = _cli()
-    common = tmp_path / "git-common"
+    metadata_root = tmp_path / "git-metadata"
+    common = metadata_root / ".git"
     primary = tmp_path / "primary"
     linked = tmp_path / "linked"
     isolated_env = dict(os.environ)
@@ -686,6 +687,7 @@ def test_real_beads_fallback_is_blocked_before_container_exec(tmp_path: Path) ->
         )
         return result
 
+    metadata_root.mkdir()
     invoke("git", "init", "--separate-git-dir", str(common), str(primary))
     invoke("git", "-C", str(primary), "config", "user.name", "Boundary Test")
     invoke("git", "-C", str(primary), "config", "user.email", "boundary@example.invalid")
@@ -696,10 +698,10 @@ def test_real_beads_fallback_is_blocked_before_container_exec(tmp_path: Path) ->
         invoke("git", "-C", str(linked), "rev-parse", "--git-common-dir").stdout.strip()
     ).resolve()
     assert resolved_common == common.resolve()
-    assert resolved_common.name == "git-common"
+    assert resolved_common.name == ".git"
 
-    fallback = common / ".beads"
-    init_env = {**isolated_env, "BEADS_DIR": str(fallback)}
+    host_fallback = common / ".beads"
+    host_init_env = {**isolated_env, "BEADS_DIR": str(host_fallback)}
     invoke(
         "bd",
         "init",
@@ -707,17 +709,33 @@ def test_real_beads_fallback_is_blocked_before_container_exec(tmp_path: Path) ->
         "--skip-hooks",
         "--non-interactive",
         "--prefix",
-        "boundary",
-        env=init_env,
+        "host",
+        env=host_init_env,
+        cwd=linked,
+    )
+    sibling_fallback = metadata_root / ".beads"
+    sibling_init_env = {**isolated_env, "BEADS_DIR": str(sibling_fallback)}
+    invoke(
+        "bd",
+        "init",
+        "--skip-agents",
+        "--skip-hooks",
+        "--non-interactive",
+        "--prefix",
+        "container",
+        env=sibling_init_env,
         cwd=linked,
     )
     local_marker = linked / ".beads" / "config.yaml"
-    assert (fallback / "config.yaml").is_file()
+    assert (host_fallback / "config.yaml").is_file()
+    assert (sibling_fallback / "config.yaml").is_file()
     assert not local_marker.exists()
 
     raw_env = {**isolated_env, "BEADS_DIR": str(linked / ".beads")}
     raw_where = invoke("bd", "where", env=raw_env, cwd=linked)
-    assert Path(raw_where.stdout.splitlines()[0]).resolve() == fallback.resolve()
+    selected = Path(raw_where.stdout.splitlines()[0]).resolve()
+    assert selected == sibling_fallback.resolve()
+    assert selected != host_fallback.resolve()
 
     project = SimpleNamespace(
         root=linked,
@@ -899,18 +917,24 @@ def test_shell_resolves_healthy_exact_name_then_execs_interactive_podman(
     assert exit_code == 0
 
 
-def test_compose_masks_host_beads_fallback_without_expanding_privileges() -> None:
+def test_compose_mounts_common_as_dot_git_without_nested_mounts_or_privileges() -> None:
     compose = yaml.safe_load(Path("deployments/compose/compose.dev.yml").read_text())
     service = compose["services"]["dev"]
-    assert "${NUTANIX_GIT_COMMON_DIR:?required}:/git-common:z" in service["volumes"]
-    assert service["tmpfs"] == ["/git-common/.beads:rw,mode=0700,notmpcopyup"]
+    common_mounts = [
+        volume
+        for volume in service["volumes"]
+        if volume.startswith("${NUTANIX_GIT_COMMON_DIR:?required}:")
+    ]
+    assert common_mounts == ["${NUTANIX_GIT_COMMON_DIR:?required}:/git-metadata/.git:z"]
+    assert "tmpfs" not in service
     assert service["environment"] == {
         "BEADS_DIR": "/workspace/.beads",
-        "GIT_COMMON_DIR": "/git-common",
-        "GIT_DIR": "/git-common/${NUTANIX_GIT_DIR_RELATIVE}",
+        "GIT_COMMON_DIR": "/git-metadata/.git",
+        "GIT_DIR": "/git-metadata/.git/${NUTANIX_GIT_DIR_RELATIVE}",
         "GIT_WORK_TREE": "/workspace",
     }
     serialized = Path("deployments/compose/compose.dev.yml").read_text()
+    assert "/git-common" not in serialized
     assert "podman.sock" not in serialized
     assert service.get("privileged", False) is False
 

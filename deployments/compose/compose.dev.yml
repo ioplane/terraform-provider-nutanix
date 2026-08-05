@@ -12,17 +12,15 @@ services:
     command: ["sleep", "infinity"]
     environment:
       BEADS_DIR: /workspace/.beads
-      GIT_COMMON_DIR: /git-common
-      GIT_DIR: /git-common/${NUTANIX_GIT_DIR_RELATIVE}
+      GIT_COMMON_DIR: /git-metadata/.git
+      GIT_DIR: /git-metadata/.git/${NUTANIX_GIT_DIR_RELATIVE}
       GIT_WORK_TREE: /workspace
     volumes:
       - ../..:/workspace:z
-      - ${NUTANIX_GIT_COMMON_DIR:?required}:/git-common:z
+      - ${NUTANIX_GIT_COMMON_DIR:?required}:/git-metadata/.git:z
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
       - uv-cache:/opt/uv-cache
-    tmpfs:
-      - /git-common/.beads:rw,mode=0700,notmpcopyup
     healthcheck:
       test:
         - CMD-SHELL

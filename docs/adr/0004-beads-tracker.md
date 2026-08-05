@@ -19,11 +19,11 @@ tracker. Synchronize the Dolt database through the Git origin under
 the generated roadmap as review and human-readable projections only, never as
 canonical task state.
 
-Anchor Beads to `BEADS_DIR=/workspace/.beads` in the development toolbox. The
-explicit anchor is required because linked worktrees expose their Git common
-directory at `/git-common`; Beads 1.1.2 otherwise treats that non-`.git`
-basename as a fallback location and can place the canonical database outside
-the mounted worktree. Worktree-local embedded Dolt state keeps each isolated
+Anchor Beads to `BEADS_DIR=/workspace/.beads` in the development toolbox.
+Mount the Git common directory at `/git-metadata/.git`: the `.git` basename
+makes Beads 1.1.2 resolve any automatic common-directory fallback to the
+container-overlay sibling `/git-metadata/.beads`, not a database nested inside
+the host bind. Worktree-local embedded Dolt state keeps each isolated
 Compose/worktree environment aligned with its checkout. Ignore database
 subtrees beneath `.beads/`, while tracking `.beads/config.yaml` and
 `.beads/issues.jsonl`. Do not automatically discover, migrate, or delete a
@@ -37,13 +37,13 @@ connector, or call the Podman API for a rejected command. Permit only a command
 whose first Beads argument is exactly `init`; this exception is what creates
 the anchored database. Options placed before `init` do not bypass the guard.
 
-As a defense-in-depth boundary, mask `/git-common/.beads` with an empty
-mode-`0700` tmpfs using `notmpcopyup` inside the development container. The
-option is mandatory because Podman's default tmpfs copy-up would populate the
-child mount from the ambient host fallback. The parent Git metadata bind
-remains mounted, but the pinned Beads binary cannot observe the fallback
-through it. This mount does not delete, migrate, or modify host state; the
-canonical container-visible database can exist only at `/workspace/.beads`.
+The required Git bind makes an existing host fallback physically reachable at
+`/git-metadata/.git/.beads`; this ADR does not claim filesystem invisibility
+from arbitrary toolbox commands. The invariant is narrower and testable: the
+pinned Beads resolver and launcher canonical path never select that nested
+location, and no automatic tracker operation mutates it. Avoid nested tmpfs or
+volume mounts because a runtime may create the child mountpoint in the host
+bind while applying mounts.
 
 Keep exactly one critical-path task `in_progress`. Close a task only after its
 acceptance evidence is attached.

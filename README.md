@@ -32,25 +32,21 @@ Go, Terraform, Task, Beads, or Python tools installed.
 container argument. Build, test, lint, generation, packaging, Terraform, Task,
 Beads, and Python quality work run inside Podman. The launcher derives a stable
 Compose project name per Git worktree, mounts that worktree at `/workspace`,
-and mounts its Git common directory at `/git-common`. Explicit `GIT_DIR`,
-`GIT_COMMON_DIR`, and `GIT_WORK_TREE` values keep Git commands such as
-`git status` functional in linked worktrees.
+and mounts its Git common directory at `/git-metadata/.git`. Explicit
+`GIT_DIR`, `GIT_COMMON_DIR`, and `GIT_WORK_TREE` values keep Git commands such
+as `git status` functional in linked worktrees.
 
-Beads is anchored explicitly at `BEADS_DIR=/workspace/.beads`. This keeps the
-embedded Dolt database local to the mounted worktree instead of letting Beads
-derive a fallback database below `/git-common` when that mount does not have a
-`.git` basename. Every `./dev beads` execution receives the anchor directly,
-and `./dev shell` inherits it from the Compose service. Database subtrees under
-`.beads/` remain ignored; only `.beads/config.yaml` and
-`.beads/issues.jsonl` are tracked projections. The launcher does not discover,
-migrate, or remove a database created at an earlier fallback location.
-The Git common-directory bind remains available at `/git-common`, but Compose
-masks its `.beads` child with an empty mode-`0700` tmpfs. This makes an ambient
-host fallback database invisible to the pinned Beads process while leaving the
-host data untouched. The mount uses `notmpcopyup`; without it, Podman would
-populate the new tmpfs from the masked host directory. The only usable tracker
-state in the toolbox is the worktree-owned `/workspace/.beads`; no fallback
-database is deleted or migrated.
+Beads is anchored explicitly at `BEADS_DIR=/workspace/.beads`. Every
+`./dev beads` execution receives the anchor directly, and `./dev shell`
+inherits it from the Compose service. Mounting the Git common directory with a
+real `.git` basename makes Beads 1.1.2 derive any automatic fallback as the
+sibling `/git-metadata/.beads`, which is container-local and not host-backed.
+An existing host fallback remains physically reachable through the required
+Git bind at `/git-metadata/.git/.beads`, but the pinned Beads resolver and the
+launcher never select it as canonical state or mutate it automatically. No
+nested mount is created, and no fallback database is deleted or migrated.
+Database subtrees under `.beads/` remain ignored; only `.beads/config.yaml`
+and `.beads/issues.jsonl` are tracked projections.
 The launcher entrypoint first resolves the worktree with exactly three bounded,
 token-scrubbed Git queries. After that mandatory discovery, it requires a real
 `.beads/` directory and a regular, non-symlink `.beads/config.yaml`; otherwise
