@@ -31,18 +31,29 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     builds_info:
       mode: 0755
-      mtime: "{{ .CommitTimestamp }}"
+      mtime: "{{ .CommitDate }}"
     files:
       - src: LICENSE
         dst: LICENSE
         strip_parent: true
         info:
           mode: 0644
-          mtime: "{{ .CommitTimestamp }}"
+          mtime: "{{ .CommitDate }}"
 
 checksum:
-  name_template: SHA256SUMS
+  name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
   algorithm: sha256
+
+sboms:
+  - id: archive
+    artifacts: archive
+    documents:
+      - "${artifact}.sbom.json"
+    cmd: syft
+    args:
+      - "$artifact"
+      - --output
+      - "spdx-json=$document"
 
 changelog:
   disable: true

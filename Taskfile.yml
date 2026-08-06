@@ -38,14 +38,15 @@ tasks:
         emit ruff ruff --version
         emit rumdl rumdl --version
         emit ty ty --version
-        emit pytest pytest --version
         emit yamllint yamllint --version
         emit golangci-lint golangci-lint version
         emit goreleaser goreleaser --version
+        emit syft syft version
         emit tfplugindocs tfplugindocs --version
         value="$(govulncheck -version 2>&1 | sed -nE 's/.*govulncheck@v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
         test -n "${value}"
         printf 'govulncheck=%s\n' "${value}"
+        emit gopls gopls version
         emit gh gh --version
         emit hadolint hadolint --version
 
@@ -57,60 +58,32 @@ tasks:
       - uv lock
 
   python:format:
-    desc: Format Python sources and tests
+    desc: Format role-oriented Python CLI sources
     deps: [_container]
     dir: /workspace
     cmds:
-      - ruff format scripts tests
+      - ruff format scripts
 
   python:format:check:
-    desc: Reject Python formatting drift without rewriting sources
+    desc: Reject Python CLI formatting drift without rewriting sources
     deps: [_container]
     dir: /workspace
     cmds:
-      - ruff format --check scripts tests
+      - ruff format --check scripts
 
   python:lint:
-    desc: Lint Python sources and tests
+    desc: Lint role-oriented Python CLI sources
     deps: [_container]
     dir: /workspace
     cmds:
-      - ruff check scripts tests
+      - ruff check scripts
 
   python:typecheck:
-    desc: Type-check Python sources and tests
+    desc: Type-check role-oriented Python CLI sources
     deps: [_container]
     dir: /workspace
     cmds:
-      - ty check
-
-  python:test:
-    desc: Run Python tests
-    deps: [_container]
-    dir: /workspace
-    cmds:
-      - pytest {{.CLI_ARGS}}
-
-  tracker:check:
-    desc: Validate canonical Beads tracker state
-    deps: [_container]
-    dir: /workspace
-    cmds:
-      - python -m scripts.checks.tracker
-
-  roadmap:generate:
-    desc: Generate the roadmap projection from canonical Beads state
-    deps: [_container]
-    dir: /workspace
-    cmds:
-      - python -m scripts.generate.roadmap --output docs/roadmap.md
-
-  roadmap:check:
-    desc: Check the roadmap projection without rewriting it
-    deps: [_container]
-    dir: /workspace
-    cmds:
-      - python -m scripts.generate.roadmap --check docs/roadmap.md
+      - ty check scripts
 
   artifacts:discover:
     desc: Discover the live GA-first Nutanix API selection without writes
@@ -170,18 +143,30 @@ tasks:
       - python -m scripts.checks.tool_versions
 
   docs:check:
-    desc: Lint tracked docs, validate internal links, and reject generated drift
+    desc: Lint repository docs, validate internal links, and reject generated drift
     deps: [_container]
     dir: /workspace
     cmds:
       - >-
-        git ls-files -z -- '*.md' '*.markdown' |
+        git ls-files -z --cached --others --exclude-standard -- '*.md' '*.markdown' |
+        sort -zu |
         xargs -0 --no-run-if-empty rumdl check --color never
       - >-
-        git ls-files -z -- '*.yml' '*.yaml' |
+        git ls-files -z --cached --others --exclude-standard -- '*.yml' '*.yaml' |
+        sort -zu |
         xargs -0 --no-run-if-empty yamllint --strict --config-file .yamllint.yml
       - python -m scripts.checks.docs_links
       - SOURCE_DATE_EPOCH=1700000000 python -m scripts.checks.docs
+
+  docs:generate:
+    desc: Generate the tracked offline Terraform Framework reference pages
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - >-
+        python -m scripts.generate.provider_docs
+        --root /workspace
+        --source-date-epoch 1700000000
 
   oci:check:
     desc: Lint the Containerfile and validate the complete Compose model
@@ -203,6 +188,25 @@ tasks:
     dir: /workspace
     cmds:
       - goreleaser check .goreleaser.yml
+
+  release:snapshot:
+    desc: Build unpublished release artifacts and SBOMs from the current revision
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - goreleaser release --clean --snapshot --skip=publish
+
+  release:build:
+    desc: Build unpublished artifacts and SBOMs for the current exact SemVer tag
+    deps: [_container]
+    dir: /workspace
+    preconditions:
+      - sh: git describe --exact-match --tags --match 'v[0-9]*' >/dev/null
+        msg: release builds require an exact SemVer tag
+      - sh: test -z "$(git status --porcelain --untracked-files=no)"
+        msg: release builds require a clean tracked worktree
+    cmds:
+      - goreleaser release --clean --skip=publish
 
   go:mod:init:
     desc: Initialize the exact Go module and download pinned provider dependencies
@@ -249,6 +253,42 @@ tasks:
     cmds:
       - go test {{.CLI_ARGS | default "./..."}}
 
+  go:test:fuzz:
+    desc: Run bounded sequential Go fuzz smoke tests
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - >-
+        go test ./internal/transport
+        -run '^$'
+        -fuzz '^FuzzOriginAndPathConstruction$'
+        -fuzztime=1s
+        -parallel=1
+      - >-
+        go test ./internal/transport
+        -run '^$'
+        -fuzz '^FuzzBoundedErrorResponse$'
+        -fuzztime=1s
+        -parallel=1
+      - >-
+        go test ./internal/transport
+        -run '^$'
+        -fuzz '^FuzzParseRetryAfter$'
+        -fuzztime=1s
+        -parallel=1
+      - >-
+        go test ./internal/transport
+        -run '^$'
+        -fuzz '^FuzzPaginationMetadata$'
+        -fuzztime=1s
+        -parallel=1
+      - >-
+        go test ./internal/nutanix/prism
+        -run '^$'
+        -fuzz '^FuzzTaskResponseDecode$'
+        -fuzztime=1s
+        -parallel=1
+
   go:test:protocol:
     desc: Prove the provider loads through Terraform Plugin Protocol 6 without live Nutanix access
     deps: [_container]
@@ -261,7 +301,7 @@ tasks:
         TF_ACC_TERRAFORM_PATH=/usr/local/bin/terraform \
         TF_ACC_TERRAFORM_VERSION=1.15.8 \
         go test -count=1 \
-          -run '^(TestServeOptions|TestAccProviderProtocol6)$' \
+          -run '^(TestServeOptions|TestAccProviderProtocol6|TestConfigureTLSConfigurationErrorProtocolDiagnostic)$' \
           ./cmd/terraform-provider-nutanix ./internal/provider
 
   go:format:
@@ -335,7 +375,7 @@ tasks:
         python -m scripts.package.provider test --version 0.0.0-dev
 
   all:
-    desc: Run the complete M0 foundation quality gate in deterministic order
+    desc: Run the lightweight implementation build and static gate
     deps: [_container]
     dir: /workspace
     cmds:
@@ -345,26 +385,19 @@ tasks:
       - task: python:format:check
       - task: python:lint
       - task: python:typecheck
-      - task: python:test
       - task: go:format:check
       - task: go:vet
       - task: go:lint
-      - task: go:test
-      - task: go:test:race
       - task: go:vuln
       - task: docs:check
       - task: oci:check
       - task: pins:check
       - task: tools:check
       - task: release:check
-      - task: tracker:check
-      - task: roadmap:check
       - task: go:build
-      - task: go:test:protocol
-      - task: package:test
 
   verify:
-    desc: Alias for the complete M0 foundation quality gate
+    desc: Alias for the lightweight implementation build and static gate
     deps: [_container]
     dir: /workspace
     cmds:

@@ -1,64 +1,67 @@
-# Testing standard
+# Product verification standard
 
-## Development cycle
+## Product-first sequence
 
-Production behavior follows red, green, refactor:
+1. Define the API, Terraform, state, identity, and lifecycle contract.
+2. Implement the complete hand-written product corpus.
+3. Use formatting, static analysis, vulnerability scanning, artifact validation, and compilation
+   during implementation.
+4. Add tests for the completed product behavior.
+5. Run authorized acceptance only in the dedicated acceptance phase.
 
-1. write the smallest test that expresses the required behavior;
-2. run it and confirm that it fails for the expected missing behavior, not for
-   a syntax, fixture, environment, or setup error;
-3. implement the smallest change that makes the test pass;
-4. run the relevant test and broader gate;
-5. refactor while keeping the tests green.
+Repository automation, launchers, documentation, workflow wiring, and policy scripts do not receive
+new test suites. Product tests cover Terraform schema and lifecycle, API mapping, state, import,
+drift, and authorized Nutanix behavior.
 
-Prefer tests of real behavior at the narrowest practical boundary. Use fakes,
-local test servers, and deterministic fixtures where they preserve the real
-protocol. Do not replace behavior with mocks merely to make a test easy to
-write, and do not test mock call choreography as a substitute for outcomes.
+## Evidence hierarchy
 
-Configuration and prose are exceptions to test-first sequencing. Their final
-normative content, generated output, formatting, and internal links must still
-be checked by the repository gate before M0 closes.
+| Level | Evidence | Purpose |
+| --- | --- | --- |
+| Static | Formatting, lint, vet, vulnerability scan, API lock, docs and build | Implementation safety |
+| Deterministic product | Local HTTP server and product fixtures | Request, response, state, error and redaction behavior |
+| Terraform lifecycle | Protocol 6 and Terraform Plugin Testing | Plan, apply, refresh, import and state behavior |
+| Live product | Authorized isolated Nutanix target | End-to-end compatibility and cleanup |
+
+Mock call choreography is not acceptance evidence. Deterministic servers and fixtures must represent
+documented product behavior and stable error contracts.
 
 ## Execution boundary
 
-All tests, Go commands, Terraform protocol checks, linters, security checks,
-fuzzing, and packaging run inside Podman through the repository launcher. Host
-toolchains are not completion evidence.
+All Go, Terraform, Python CLI, build, packaging, and product-test commands run inside Podman through
+`./dev`. Host toolchains are not completion evidence.
 
-## Required gates
+The default implementation gate is:
 
-The applicable containerized gate includes:
+```bash
+./dev task all
+```
 
-- focused and full unit tests;
-- race tests in the cgo-enabled race target;
-- `go vet ./...` and repository linting;
-- `govulncheck ./...`;
-- bounded fuzz smoke tests for available fuzz targets;
-- Terraform Plugin Protocol 6 loading and handshake checks;
-- deterministic package and consumer-install checks;
-- repository content, generated-output, and internal-link checks;
-- a clean-clone bootstrap and full-gate proof.
+It intentionally excludes Python tooling tests, Go unit tests, fuzzing, race tests, Protocol
+acceptance, package acceptance, and live acceptance until their owning product phase requires them.
 
-A required gate that does not run is not green. Never convert a failure into a
-pass by skipping, weakening, deleting, or silently excluding the required test.
-Record the failure and leave status incomplete until the gate genuinely passes.
+## Live acceptance
 
-## Live acceptance boundary
+Live tests require all of the following:
 
-M0 uses no live Prism Element or Prism Central system. Its protocol, package,
-transport, and repository checks use local, deterministic fixtures.
+- an isolated non-production target;
+- explicit authorization for every mutation class;
+- collision-free test identity;
+- bounded execution and retries;
+- deterministic cleanup behavior;
+- evidence for the tested outcome and successful cleanup.
 
-Later live acceptance tests require an approved contract that identifies an
-isolated non-production target, explicit authorization, collision-free test
-identity, bounded execution, and cleanup behavior. Evidence must show both the
-tested outcome and successful cleanup. A skipped or unavailable live gate
-cannot be reported as passed.
+A skipped, unavailable, or partially cleaned live gate is not passed evidence.
+
+## CI/CD
+
+GitHub Actions invokes `./dev task all` for pull requests and `main`. Release artifacts are built
+inside the same Podman boundary after a Release Please PR creates a SemVer tag. If GitLab CI is
+added, jobs invoke small role-oriented Python CLI modules with explicit inputs, deterministic exit
+codes, and concise output.
 
 ## References
 
-- [Go fuzzing](https://go.dev/doc/security/fuzz/)
-- [Go security best practices](https://go.dev/doc/security/best-practices)
+- [Provider contract](../contract.md)
+- [Release process](../release-process.md)
 - [Terraform Plugin Framework](https://developer.hashicorp.com/terraform/plugin/framework)
-- [Terraform plugin protocol](https://developer.hashicorp.com/terraform/plugin/terraform-plugin-protocol)
-- [Approved foundation design](../superpowers/specs/2026-08-04-foundation-design.md)
+- [Terraform Plugin Testing](https://developer.hashicorp.com/terraform/plugin/testing)

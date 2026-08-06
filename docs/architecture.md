@@ -1,84 +1,120 @@
 # Provider architecture
 
-This project is a greenfield, one-binary Terraform provider implemented as a
-modular monolith. It does not fork or reuse implementation code from the
-official Nutanix provider.
+## System context
 
-## Package layout
+The provider is a single Terraform Plugin Framework binary implemented as a modular monolith.
+Terraform-facing code and Nutanix wire code use explicit interfaces at their point of consumption.
 
-The production and test package layout is:
-
-```text
-cmd/terraform-provider-nutanix
-internal/provider
-internal/service/<domain>/<terraform-type>
-internal/nutanix/<api-namespace>
-internal/transport
-internal/auth
-internal/task
-internal/capability
-internal/testserver
+```mermaid
+flowchart LR
+  TF[Terraform CLI] -->|Plugin Protocol 6| PR[Provider composition]
+  PR --> SV[Service packages]
+  SV --> NS[Namespace clients]
+  NS --> TR[Origin-bound transport]
+  TR --> NX[Nutanix APIs]
+  PR --> AU[Authentication]
+  PR --> CP[Capability registry]
+  PR --> TK[Task waiter]
+  AR[Locked API artifacts] -. operation contract .-> NS
 ```
 
-Allowed dependencies are explicit:
+## Package boundaries
 
-| Package | Allowed imports and constraints |
-| --- | --- |
-| `cmd/terraform-provider-nutanix` | Imports `provider` only. |
-| `provider` | May import `service`, `capability`, and Terraform Plugin Framework. |
-| `service` | May import `nutanix/<namespace>`, `task`, `capability`, and Terraform Plugin Framework. |
-| `nutanix/<namespace>` | May import `transport` and `auth` as needed; never imports Terraform Plugin Framework. |
-| `task` | Imports `transport`; never imports Terraform Plugin Framework. |
-| `capability` | May import `nutanix/<namespace>` and `transport`; never imports Terraform Plugin Framework. |
-| `transport` | May import `auth`; never imports Terraform Plugin Framework. |
-| `auth` | Depends only on the Go standard library and project-neutral helpers; never imports Terraform Plugin Framework. |
-| `testserver` | May import production packages only for tests; no production package may import `testserver`. |
+| Package | Responsibility | Forbidden dependency |
+| --- | --- | --- |
+| `cmd/terraform-provider-nutanix` | Protocol 6 process entry point | Product implementation |
+| `internal/provider` | Provider schema, configuration, composition, registration | Namespace DTO ownership |
+| `internal/service/<domain>/<type>` | Terraform schema, models, diagnostics, state mapping | Raw transport and authentication |
+| `internal/nutanix/<namespace>` | Paths, operation policies, DTOs, response validation | Terraform Plugin Framework |
+| `internal/transport` | HTTPS, retry, body limits, typed HTTP errors, pagination primitives | Namespace DTOs |
+| `internal/auth` | Basic and API-key credential application | Logging and Terraform packages |
+| `internal/task` | Context-bound vendor-neutral task state machine | Namespace packages |
+| `internal/capability` | Concurrent positive and negative capability cache | Transport and namespace packages |
 
-No reverse dependency or import cycle is allowed. `provider` assembles the
-Terraform provider; `service` owns Terraform schemas, state models, and
-lifecycle behavior; `nutanix/<namespace>` owns namespace-specific DTOs and
-operations; and `transport`, `auth`, `task`, and `capability` remain focused
-support packages.
-
-Catch-all Go packages named `api`, `core`, `common`, `types`, or `util` are
-forbidden. Shared behavior belongs in a package with one concrete
-responsibility.
+Production code remains under `cmd/` and `internal/`. Catch-all packages named `api`, `common`,
+`core`, `types`, or `util` are not allowed.
 
 ## Implementation boundary
 
-Transport code, Nutanix DTOs, Terraform schemas, and Terraform state models
-are hand-written. Official OpenAPI and related Nutanix artifacts are locked
-design evidence and test inputs, not code-generation inputs. Nutanix SDKs are
-not runtime dependencies, and neither SDKs nor OpenAPI generate implementation
-code or public Terraform schemas.
+- Transport, DTOs, Terraform schemas, and state models are hand-written.
+- Nutanix SDKs are not runtime dependencies.
+- OpenAPI and Postman artifacts are contract evidence and validation inputs, not code-generation
+  inputs.
+- Provider composition constructs one authentication policy, one origin-bound transport, namespace
+  adapters, one task waiter, and one capability registry.
+- Service packages receive the smallest consumer-defined interface required by the Terraform type.
+- Configuration constructs clients without a live network call.
 
-M0 will establish an empty provider served through Terraform Plugin Protocol
-6. It will register no resource, data source, action, function, or ephemeral
-resource. Product behavior begins only in later phases after its public
-contract is approved.
+## Read lifecycle
 
-## Delivery phases
+```mermaid
+sequenceDiagram
+  participant TF as Terraform Framework
+  participant DS as Data source
+  participant NS as Namespace client
+  participant TR as Transport
+  participant API as Nutanix API
 
-| Phase | Architectural outcome |
+  TF->>DS: Read(ctx, request, response)
+  DS->>DS: Decode and validate Terraform input
+  DS->>NS: Invoke consumer-defined reader
+  NS->>NS: Build immutable operation policy and query
+  NS->>TR: Execute HTTP request
+  TR->>API: HTTPS request with bounded retry policy
+  API-->>TR: Status, headers, bounded body
+  TR-->>NS: Typed response
+  NS->>NS: Decode DTO and validate remote identity
+  NS-->>DS: Validated domain result
+  DS->>DS: Map nulls, identity, and state
+  DS-->>TF: State.Set or stable diagnostic
+```
+
+No reflection, generated client, package-global client, or service locator participates in the
+call path.
+
+## Transport invariants
+
+| Area | Invariant |
 | --- | --- |
-| M0 Foundation | Repository controls, reproducible tooling, CI, and an empty protocol 6 provider |
-| M1 Kernel | Configuration, authentication, transport, diagnostics, retries, pagination, ETags, task polling, and capabilities |
-| M2 Read-only canary | Initial read-only types and an import canary |
-| M3 Foundation resources | Categories, projects, subnets, storage containers and policies, and image placement |
-| M4 Compute and block storage | Virtual machines, volume groups, and affinity |
-| M5 IAM | Directories, users, groups, roles, policies, and user keys |
-| M6 Objects compatibility | Official create-only Object Store lifecycle |
-| M7 Compatibility release | Current downstream resource and data-source surface with state fixtures |
-| M8 Segmented Objects | Separate draft plus precheck and deploy actions |
-| M9 Product expansion | Supported stable v4 product namespaces |
-| M10 External planes | Foundation, NDB, Self-Service, NC2, NKP, NDK, and NAI adapters |
+| Origin | Requests remain on the configured HTTPS authority; redirects are rejected |
+| Authentication | Credentials enter headers immediately before dispatch and never enter logs or errors |
+| Retry | Operation policy selects retry eligibility; HTTP method alone is insufficient |
+| Mutation identity | A stable `NTNX-Request-Id` spans eligible attempts for one logical operation |
+| Responses | Success and error bodies are bounded and closed on every path |
+| Pagination | Zero-based, bounded, callback-driven, and never follows arbitrary remote URLs |
+| Concurrency | ETags are explicit transport values; update operations use reviewed `If-Match` behavior |
+| Logging | `tflog` records allowlisted metadata and path templates only |
 
-M0 makes no downstream compatibility claim. The detailed scope and gates for
-each phase remain in the approved design and implementation plan.
+## State and error ownership
+
+Namespace DTO pointers preserve JSON null. Services map nil scalars to Terraform null values, nil
+collections to typed null lists, and non-nil empty slices to empty lists. State is written only after
+the complete response passes decoding and identity validation.
+
+Transport returns typed status and protocol errors without response bodies. Namespace packages add
+operation context and preserve stable causes with `%w`. Service packages translate failures once
+into Terraform Framework diagnostics.
+
+## Product planes
+
+```mermaid
+flowchart TB
+  K[Shared provider kernel]
+  K --> PC[Prism Central namespaces]
+  K --> PE[Prism Element namespaces]
+  K --> EX[External product-plane adapters]
+  PC --> V4[Versioned v4 namespace clients]
+  PE --> V2[Reviewed compatibility clients]
+  EX --> P[Product-local clients and authentication contracts]
+```
+
+Each plane owns its endpoint, authentication, capability, and version contract. Provider aliases
+represent multiple endpoints; one provider instance does not fan out across unrelated authorities.
 
 ## References
 
-- [Approved foundation design](superpowers/specs/2026-08-04-foundation-design.md)
-- [Approved foundation implementation plan](superpowers/plans/2026-08-04-foundation.md)
+- [Provider contract](contract.md)
+- [Nutanix artifact standard](standards/nutanix-artifacts.md)
+- [Go dependency policy](standards/dependencies.md)
 - [Terraform Plugin Framework](https://developer.hashicorp.com/terraform/plugin/framework)
-- [Terraform plugin protocol](https://developer.hashicorp.com/terraform/plugin/terraform-plugin-protocol)
+- [Terraform Plugin Protocol](https://developer.hashicorp.com/terraform/plugin/terraform-plugin-protocol)

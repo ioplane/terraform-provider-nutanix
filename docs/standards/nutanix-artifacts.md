@@ -1,45 +1,27 @@
-# Nutanix artifact standard
+# Nutanix API artifact standard
 
-## Authoritative endpoints
+## Public source
 
-The [Nutanix Developer Portal](https://developers.nutanix.com/) is the primary
-machine-readable source for Nutanix API contracts. Artifact discovery and
-download use these exact GET endpoints:
+The [Nutanix Developer Portal](https://developers.nutanix.com/) is the primary machine-readable API
+source. Discovery and verification use the public registry endpoints below.
 
-```text
-GET https://developers.nutanix.com/api/v1/namespaces/
-GET https://developers.nutanix.com/api/v1/namespaces/<namespace>/versions/
-GET https://developers.nutanix.com/api/v1/namespaces/<namespace>/versions/<version>/yaml
-GET https://developers.nutanix.com/api/v1/namespaces/<namespace>/versions/<version>/postman-collection
-GET https://developers.nutanix.com/api/v1/namespaces/<namespace>/versions/<version>/locale/en_US/error
+```http
+GET /api/v1/namespaces/
+GET /api/v1/namespaces/{namespace}/versions/
+GET /api/v1/namespaces/{namespace}/versions/{version}/yaml
+GET /api/v1/namespaces/{namespace}/versions/{version}/postman-collection
+GET /api/v1/namespaces/{namespace}/versions/{version}/locale/en_US/error
 ```
 
-Discovery, update, and verification use GET, not HEAD. Verification checks the
-returned media type, content shape, byte count, and SHA-256 digest rather than
-inferring availability from headers.
+Requests use `GET`. The artifact gate validates redirect authority, media type, content shape, byte
+count, and SHA-256 digest. URLs with user information, query strings, fragments, encoded path bytes,
+or traversal segments are rejected.
 
-The 2026-08-04 live lock labels all 19 selected OpenAPI documents and all 19
-selected Postman collections as `text/plain; charset=utf-8`; all 19 English
-error references use `application/json`. The lock pipeline accepts `text/plain`
-for OpenAPI YAML and Postman collections only. A Postman body must still parse
-as JSON with an `item` array, and the manifest records the observed
-`text/plain` media type. Registry, version, and error-reference documents still
-require a JSON media type. This explicit compatibility exception does not apply
-to arbitrary artifact kinds.
+## Version selection
 
-The pipeline rejects redirects before following them when their target leaves
-the exact Developer Portal API prefix. Registry-supplied URLs may not contain
-userinfo, query strings, fragments, percent-encoded path bytes, or traversal
-segments. Reads are bounded and never include a response body in diagnostics.
-
-## Locked namespace set
-
-There is no single global Nutanix API version. M0 locks one selected version
-for every namespace in the registry. Selection prefers the newest GA version
-matching `v<major>.<minor>`. A preview version is allowed only when the
-namespace has no GA version, and the manifest records `preview` explicitly.
-
-The approved initial lock is:
+Nutanix APIs are versioned per namespace. Selection uses the newest GA version matching
+`v<major>.<minor>`. A preview is selected only when the namespace publishes no GA version and the
+manifest records that status explicitly.
 
 | Namespace | Version | Stability |
 | --- | --- | --- |
@@ -59,56 +41,58 @@ The approved initial lock is:
 | `opsmgmt` | `v4.0` | GA |
 | `prism` | `v4.3` | GA |
 | `security` | `v4.1` | GA |
-| `storage` | `v4.0.a3` | preview; no GA published |
+| `storage` | `v4.0.a3` | Preview; no GA published |
 | `vmm` | `v4.2` | GA |
 | `volumes` | `v4.2` | GA |
 
 ## Manifest and cache
 
-`specs/nutanix/manifest.json` is the repository lock. For each selected
-namespace and version it records stability and the published OpenAPI, Postman,
-and English error-reference artifact URLs when available. Each locked artifact
-records its URL, expected media type, byte count, and SHA-256 digest.
-The manifest and each cache body are written through a temporary file in the
-destination directory followed by atomic replacement. The manifest has no
-wall-clock timestamp, so an unchanged portal produces byte-identical lock
-content. A staged-file gate rejects vendor cache paths even if they were added
-with Git's force option.
+[`specs/nutanix/manifest.json`](../../specs/nutanix/manifest.json) is the repository lock. Each
+artifact records its URL, expected media type, byte count, and SHA-256 digest. The manifest excludes
+wall-clock timestamps so unchanged registry data produces byte-identical output.
 
-Downloaded bodies live only under the repository-ignored
-`.cache/nutanix/artifacts/` tree. The provider never downloads registry or
-artifact content at runtime. Vendor bodies are not committed before a separate
-redistribution review approves their inclusion.
+Downloaded bodies remain under the ignored `.cache/nutanix/artifacts/` directory. Vendor bodies are
+not committed and the provider never downloads registry artifacts at runtime.
 
-An update must prove that the locked namespace set equals the live registry
-set, that GA-first selection remains correct, and that every locked artifact
-matches its recorded metadata and digest. Artifact updates do not change
-application code.
+```bash
+./dev task artifacts:discover
+./dev task artifacts:update
+./dev task artifacts:verify
+```
 
 ## Evidence precedence
 
-Use sources in this order:
+| Priority | Evidence | Allowed use |
+| --- | --- | --- |
+| 1 | Selected GA OpenAPI, or selected preview when no GA exists | Wire contract |
+| 2 | Selected English error reference | Error contract |
+| 3 | Selected Postman collection | Request and example corroboration |
+| 4 | Official SDK documentation and examples | Comparison only |
+| 5 | Version-identified shipped-product artifacts | Availability and discrepancy evidence only |
+| 6 | Authorized live PE or PC observation | Explicit documentation gaps only |
 
-1. the selected GA OpenAPI document, or the explicitly selected preview
-   OpenAPI document when no GA version exists;
-2. the selected version's English error reference;
-3. the selected version's Postman collection;
-4. official SDK documentation and examples as comparison evidence only;
-5. an authorized live PE or PC observation only for an explicitly recorded
-   documentation gap.
+OpenAPI, error-reference, and Postman conflicts are recorded and fail closed. Secondary or live
+evidence cannot silently replace the selected Developer Portal contract.
 
-Record OpenAPI, error-reference, and Postman discrepancies as contract risks;
-do not resolve them silently. A live observation documents a gap and does not
-rewrite the locked source without review.
+Nutanix SDKs are not runtime dependencies or code-generation inputs. OpenAPI does not generate
+transport code, DTOs, Terraform schemas, state models, or lifecycle logic.
 
-Nutanix SDKs are neither runtime dependencies nor code-generation inputs.
-OpenAPI does not generate transport code, DTOs, Terraform schemas, state
-models, or lifecycle logic. Every product implementation task cites the exact
-locked namespace, version, operations, and schemas it uses.
+## Operation gate
+
+Every implemented operation must bind:
+
+1. namespace and selected version;
+2. exact operation ID, HTTP method, and versioned path;
+3. request, success, error, pagination, task, and ETag semantics;
+4. the hand-written namespace DTOs and Terraform state mapping;
+5. independent exact-path corroboration where available.
+
+An operation absent from the selected public lock remains research input and is not an
+implementation contract. Placeholder or incomplete schemas never define public Terraform state.
 
 ## References
 
 - [Nutanix namespace registry](https://developers.nutanix.com/api/v1/namespaces/)
 - [Nutanix Developer Portal](https://developers.nutanix.com/)
-- [Approved foundation design](../superpowers/specs/2026-08-04-foundation-design.md)
 - [Provider architecture](../architecture.md)
+- [Provider contract](../contract.md)

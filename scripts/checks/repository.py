@@ -12,12 +12,11 @@ from scripts.automation.process import CommandError, run
 
 REQUIRED_FILES = (
     ".hadolint.yaml",
+    ".release-please-manifest.json",
     ".yamllint.yml",
     ".goreleaser.yml",
-    "AGENTS.md",
     "CHANGELOG.md",
-    "CLAUDE.md",
-    "CODEX.md",
+    "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
     "LICENSE",
     "README.md",
@@ -27,14 +26,20 @@ REQUIRED_FILES = (
     "docs/architecture.md",
     "docs/contract.md",
     "docs/index.md",
+    "docs/release-process.md",
+    "docs/roadmap.md",
+    "docs/standards/dependencies.md",
+    "docs/standards/go-1.26.md",
+    "docs/standards/naming.md",
+    "docs/standards/nutanix-artifacts.md",
+    "docs/standards/testing.md",
     "deployments/containers/tool-assets.lock",
     "go.mod",
     "go.sum",
+    "release-please-config.json",
 )
-POINTER_FILES = {
-    "CLAUDE.md": "@AGENTS.md\n",
-    "CODEX.md": "Follow the authoritative repository instructions in [AGENTS.md](AGENTS.md).\n",
-}
+FORBIDDEN_PUBLIC_FILES = {".beads/issues.jsonl", "AGENTS.md", "CLAUDE.md", "CODEX.md"}
+FORBIDDEN_PUBLIC_DIRECTORIES = {PurePosixPath("docs/adr"), PurePosixPath("docs/superpowers")}
 
 Runner = Callable[[Sequence[str], Path], str]
 
@@ -52,7 +57,12 @@ def _forbidden(path_text: str) -> bool:
     parts = path.parts
     name = path.name
     return (
-        ".cache" in parts
+        path_text in FORBIDDEN_PUBLIC_FILES
+        or any(
+            directory == path or directory in path.parents
+            for directory in FORBIDDEN_PUBLIC_DIRECTORIES
+        )
+        or ".cache" in parts
         or ".terraform" in parts
         or name == ".env"
         or name.startswith(".env.")
@@ -68,11 +78,6 @@ def validate(root: Path, tracked_paths: Sequence[str]) -> list[str]:
     for relative in REQUIRED_FILES:
         if not (root / relative).is_file():
             diagnostics.append(f"required file missing: {relative}")
-
-    for relative, expected in POINTER_FILES.items():
-        path = root / relative
-        if path.is_file() and path.read_text() != expected:
-            diagnostics.append(f"pointer file differs: {relative}")
 
     for relative in sorted(set(tracked_paths)):
         if _forbidden(relative):

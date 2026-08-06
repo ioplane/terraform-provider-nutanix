@@ -1,16 +1,64 @@
 # Contributing
 
-The M0 foundation is still in progress. Before contributing, read the authoritative [repository instructions](AGENTS.md), the approved [foundation design](docs/superpowers/specs/2026-08-04-foundation-design.md), and the approved [foundation implementation plan](docs/superpowers/plans/2026-08-04-foundation.md).
+## Engineering contract
 
-## Workflow
+Contributions must preserve the public boundaries defined by the
+[provider contract](docs/contract.md), [architecture](docs/architecture.md), and
+[engineering standards](docs/standards/go-1.26.md).
 
-1. Start from an issue with defined scope and acceptance criteria, then represent the work and its dependencies in Beads. Beads is the canonical task tracker, and only one critical-path task may be in progress.
-2. For a Terraform type, obtain design and independent ARC approval for its schema, state, remote identity, import behavior, and test contract before implementation begins.
-3. Use one sprint branch, one worktree, and one pull request. Keep the change focused on its issue and Beads task.
-4. Work test-first using the red-green-refactor cycle. Run Go, Terraform, Task, Beads, and the required Python quality, generation, and packaging work in Podman through `./dev`.
-5. Run the applicable containerized gate and record its evidence. Close Beads work only after its acceptance evidence is attached.
-6. Open a pull request that links the issue and Beads task, explains the contract and risks, and includes verification evidence. Resolve review and CI failures before merge.
+| Rule | Requirement |
+| --- | --- |
+| Implementation | Hand-written Go; no Nutanix SDK or generated runtime client |
+| API authority | Locked Nutanix Developer Portal artifacts with exact operation evidence |
+| Runtime | Terraform Plugin Framework and Protocol 6 |
+| Development | Podman through `./dev` |
+| Secrets | No credentials, endpoints, Terraform state, or secret-bearing fixtures |
+| Tests | Product tests only, after the owning product corpus is structurally complete |
 
-Use [Conventional Commits](https://www.conventionalcommits.org/) for commit subjects, such as `feat:`, `fix:`, `test:`, `docs:`, `build:`, `ci:`, and `chore:`. Keep commits reviewable and do not mix unrelated changes.
+## Pull-request workflow
 
-Never commit credentials, endpoints, Terraform state, or secret-bearing fixtures. Live-system mutation requires an explicit acceptance contract and explicit authorization.
+1. Open or select a GitHub issue with explicit scope and acceptance criteria.
+2. Create a focused branch and keep unrelated changes separate.
+3. Update public documentation when a contract, workflow, or compatibility surface changes.
+4. Run the complete containerized gate.
+5. Open a pull request with risk, compatibility, and verification evidence.
+6. Resolve required reviews, conversations, and the `Foundation` status check before merge.
+
+```bash
+./dev up
+./dev task all
+```
+
+> [!IMPORTANT]
+> Live Nutanix mutation and live acceptance require an isolated non-production target,
+> explicit authorization, bounded cleanup, and evidence that cleanup completed.
+
+## Commit convention
+
+Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+
+| Prefix | Release effect |
+| --- | --- |
+| `feat:` | Minor release before `v1.0.0` |
+| `fix:` or `perf:` | Patch release |
+| `feat!:` or `BREAKING CHANGE:` | Minor before `v1.0.0`; major from `v1.0.0` |
+| `docs:`, `build:`, `ci:`, `chore:`, `refactor:`, `test:` | No release by default |
+
+Commit subjects must be imperative, concise, and scoped to one change.
+
+## Documentation
+
+- Use GitHub-flavored Markdown, descriptive headings, tables for exact mappings, and Mermaid for
+  non-trivial flows.
+- Keep documents factual and present-tense; omit sprint narratives, private repository references,
+  review transcripts, and tool-specific planning artifacts.
+- Keep relative links valid and run the documentation gate through `./dev task docs:check`.
+- Do not edit generated files under `docs/data-sources/` or `docs/index.md` directly.
+
+## Release boundary
+
+Release Please owns the release pull request, `CHANGELOG.md`, SemVer tag, and GitHub Release.
+GoReleaser builds archives, checksums, and SBOMs inside Podman after the release PR merges.
+Manual release tags and manual changelog version sections are not accepted.
+
+See the [release process](docs/release-process.md).

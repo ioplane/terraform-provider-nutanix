@@ -2,83 +2,65 @@
 
 ## Toolchain contract
 
-- `go.mod` declares `go 1.26.0`.
-- The development container supplies exactly Go 1.26.5.
-- `GOTOOLCHAIN=local` prevents automatic toolchain downloads or switches.
-- Normal builds and releases use `CGO_ENABLED=0`.
-- Race tests run in a separate container target with cgo and the container C
-  compiler enabled.
-- Experimental `GOEXPERIMENT` features are outside the supported build.
+| Component | Contract |
+| --- | --- |
+| Module language baseline | `go 1.26.0` |
+| Build toolchain | Go 1.26.5 in the pinned Podman image |
+| Language server | `gopls` 0.23.0 in the same image |
+| Toolchain selection | `GOTOOLCHAIN=local` |
+| Release build | `CGO_ENABLED=0` |
+| Experimental features | Not supported |
 
-Go commands run only inside the repository's Podman development environment.
-The host Go toolchain is never completion evidence.
+The module directive defines minimum language and module semantics. The immutable image selects the
+security-patched build toolchain. Go commands run only through the repository Podman environment;
+the host Go installation is not verification evidence.
 
-## Packages and dependencies
+## Package design
 
-Production Go code stays under `cmd` and `internal`; the module promises no
-public Go library API. Packages are small, lower-case, single-word units with
-one concrete responsibility. The dependency boundaries in the
-[provider architecture](../architecture.md) apply to every package.
-
-Use Effective Go as baseline idiom guidance alongside the current Go release,
-module-layout, code-review, and security guidance linked below.
-
-Prefer the standard library. Add a dependency only when its benefit justifies
-its maintenance and security surface. Declare an interface in the consuming
-package at the point of use. Do not create an interface next to an
-implementation solely to enable mocking.
+- Production code remains under `cmd/` and `internal/`.
+- Packages are lower-case, single-word units with one responsibility.
+- Consumer packages declare the smallest interface they need.
+- Interfaces are not added next to implementations only to support mocking.
+- Standard-library behavior is preferred over generic third-party abstractions.
+- Every function makes ownership, mutability, cancellation, and error propagation explicit.
 
 ## Context, errors, and concurrency
 
-- `context.Context` is the first argument to request-bound work. Propagate it
-  through every call and into every HTTP request; never store it in a struct.
-- Add concise operation context to errors and preserve the cause with `%w`
-  when callers may inspect or unwrap it. Handle an error at one level rather
-  than logging and returning the same failure repeatedly.
-- Error text starts with a lower-case letter and has no terminal punctuation.
-  Do not parse arbitrary error text as control flow.
-- Panic is not normal error handling. Use it only for an unrecoverable
-  programmer invariant, never for a remote, configuration, or user error.
-- Every goroutine has an owner, a bounded lifetime, a cancellation or shutdown
-  path, and a rule for collecting its result. Unbounded background work and
-  leaked goroutines are forbidden.
+| Area | Rule |
+| --- | --- |
+| Context | `context.Context` is the first argument for request-bound work and is never stored in a struct |
+| Errors | Add concise operation context and preserve inspectable causes with `%w` |
+| Error text | Lower-case initial letter and no terminal punctuation |
+| Logging | Handle or return an error; do not log and return the same failure repeatedly |
+| Panic | Restricted to unrecoverable programmer invariants |
+| Goroutines | Require an owner, bounded lifetime, cancellation path, and collected result |
 
-## HTTP behavior
+## HTTP and security
 
-HTTP clients set explicit timeouts and preserve caller cancellation. Every
-response body is closed on every path, including non-success responses. Limit
-and validate bodies before decoding when an endpoint can return unbounded
-data.
+HTTP clients preserve caller cancellation and use explicit timeouts. Every response body is bounded
+and closed on every path. Credentials, authorization headers, sensitive query values, bodies, and
+provider configuration are excluded from logs, diagnostics, and returned errors.
 
-Logs, diagnostics, and returned errors redact credentials, authorization
-headers, sensitive query values, request bodies, response bodies, and provider
-configuration. Tests cover cancellation, timeout, body closure, and redaction
-for shared transport behavior.
+Run `govulncheck ./...` for reachable Go vulnerabilities. Toolchain and dependency updates require
+review of every release note in the upgrade range.
 
-## Required Go gate
+## Required implementation gate
 
-The containerized gate includes:
+```bash
+./dev task all
+```
 
-1. formatting;
-2. `go vet ./...`;
-3. unit tests;
-4. race tests in the cgo-enabled race target;
-5. repository linting;
-6. `govulncheck ./...`;
-7. bounded fuzz smoke tests for fuzz targets that exist.
+The gate includes Go formatting, `go vet`, `golangci-lint`, `govulncheck`, release configuration
+validation, and a provider build. It excludes non-product test suites. Product tests are added only
+after the corresponding Nutanix product corpus is structurally complete.
 
-Parsers, pagination, filter construction, state upgrades, and remote error
-decoding gain native fuzz targets as they are introduced. CI runs bounded
-smoke fuzzing; longer fuzz runs belong in a scheduled gate.
-
-Go 1.26 `go fix` is an explicit, reviewed modernization operation. It is not
-an automatic mutating CI step, and its diff must pass the full gate.
+`go fix` is an explicit reviewed modernization operation and never an automatic CI mutation.
 
 ## References
 
 - [Go 1.26 release notes](https://go.dev/doc/go1.26)
+- [Go toolchain selection](https://go.dev/doc/toolchain)
 - [Effective Go](https://go.dev/doc/effective_go)
-- [Organizing a Go module](https://go.dev/doc/modules/layout)
 - [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments)
 - [Go security best practices](https://go.dev/doc/security/best-practices)
-- [Approved foundation design](../superpowers/specs/2026-08-04-foundation-design.md)
+- [Dependency policy](dependencies.md)
