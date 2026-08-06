@@ -1,4 +1,4 @@
-"""Validate repository-local links in tracked Markdown documents."""
+"""Validate repository-local links in tracked and untracked Markdown documents."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ _EXTERNAL_SCHEMES = frozenset({"data", "http", "https", "mailto", "tel"})
 
 
 class DocsLinkError(RuntimeError):
-    """DocsLinkError reports an unavailable tracked-file inventory."""
+    """DocsLinkError reports an unavailable repository-file inventory."""
 
 
 def _link_target(raw: str) -> str:
@@ -112,30 +112,43 @@ def validate(root: Path, tracked_paths: Sequence[str]) -> list[str]:
     return sorted(set(diagnostics))
 
 
-def _git_ls_markdown(arguments: Sequence[str], root: Path) -> str:
+def _git_markdown_inventory(arguments: Sequence[str], root: Path) -> str:
     try:
         return run(arguments, cwd=root, timeout=15.0).stdout
     except (CommandError, OSError) as error:
-        raise DocsLinkError("cannot inspect tracked Markdown files") from error
+        raise DocsLinkError("cannot inspect repository Markdown files") from error
 
 
 def main(
     *,
     root: Path | None = None,
-    runner: Runner = _git_ls_markdown,
+    runner: Runner = _git_markdown_inventory,
     stdout: TextIO = sys.stdout,
     stderr: TextIO = sys.stderr,
 ) -> int:
-    """Validate internal links for every tracked Markdown file."""
+    """Validate internal links for every tracked or untracked Markdown file."""
     selected_root = Path.cwd() if root is None else root
     try:
-        payload = runner(("git", "ls-files", "-z", "--", "*.md", "*.markdown"), selected_root)
+        payload = runner(
+            (
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "--",
+                "*.md",
+                "*.markdown",
+            ),
+            selected_root,
+        )
     except DocsLinkError as error:
         print(f"docs-links: {error}", file=stderr)
         return 1
-    tracked = tuple(path for path in payload.split("\0") if path)
+    documents = tuple(path for path in payload.split("\0") if path)
     try:
-        diagnostics = validate(selected_root, tracked)
+        diagnostics = validate(selected_root, documents)
     except (OSError, UnicodeError) as error:
         print(f"docs-links: cannot read Markdown inputs: {error}", file=stderr)
         return 1
@@ -143,7 +156,7 @@ def main(
         for diagnostic in diagnostics:
             print(f"docs-links: {diagnostic}", file=stderr)
         return 1
-    print(f"docs-links: ok ({len(tracked)} tracked Markdown files)", file=stdout)
+    print(f"docs-links: ok ({len(documents)} repository Markdown files)", file=stdout)
     return 0
 
 

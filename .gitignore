@@ -49,8 +49,6 @@ crash.*.log
 .DS_Store
 Thumbs.db
 
-# Beads local Dolt/database/runtime data; commit only portable configuration
-# and the reviewable JSONL export.
+# Beads local Dolt/database/runtime data; commit only portable configuration.
 .beads/*
 !.beads/config.yaml
-!.beads/issues.jsonl
