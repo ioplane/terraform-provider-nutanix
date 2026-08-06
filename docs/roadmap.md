@@ -27,7 +27,7 @@ flowchart LR
 | Read-only surface | Cluster, category, image, and subnet data sources | Implemented; product verification pending |
 | Core resources | Categories, projects, subnets, storage containers, policies, and image placement | Planned |
 | Compute and storage | Virtual machines, volume groups, affinity, and block storage | Planned |
-| IAM | Directories, users, groups, roles, policies, and user keys | Planned |
+| IAM | Provisional roles and operations; directories, users, groups, policies, and user keys planned | Roles and operations implemented; MCP verification pending |
 | Objects compatibility | Object Store lifecycle compatible with public API constraints | Planned |
 | Compatibility surface | Downstream resource, data-source, import, and state compatibility | Planned |
 | Segmented Objects | Draft, precheck, and deployment actions | Planned |
@@ -38,7 +38,7 @@ flowchart LR
 
 | Gate | Required evidence |
 | --- | --- |
-| API | Selected public artifact, exact operation, path, version, schema, and error contract |
+| API | Selected public artifact, exact operation, path, version, schema, and error contract; exact MCP corroboration is required before promotion |
 | Terraform | Schema, state, identity, import, lifecycle, null, unknown, and sensitivity contract |
 | Architecture | Package ownership and complete function interaction path |
 | Implementation | Hand-written code passes the complete Podman static and build gate |

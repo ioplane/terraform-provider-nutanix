@@ -81,6 +81,8 @@ object names, and remote identifiers are excluded.
 | `nutanix_categories_v2` | `listCategories` | `GET /api/prism/v4.3/config/categories` |
 | `nutanix_images_v2` | `listImages` | `GET /api/vmm/v4.2/content/images` |
 | `nutanix_subnet_v2` | `getSubnetById` | `GET /api/networking/v4.3/config/subnets/{extId}` |
+| `nutanix_roles_v2` | `listRoles` | `GET /api/iam/v4.0/authz/roles` |
+| `nutanix_operations_v2` | `listOperations` | `GET /api/iam/v4.0/authz/operations` |
 
 List state IDs are lowercase SHA-256 values over the Terraform type and normalized caller-only
 query identity. Namespace-added projections and server defaults do not alter identity. The subnet
@@ -92,8 +94,9 @@ lists. Required remote identity fields are validated before state is written. Ge
 schemas are available under [`docs/data-sources/`](data-sources/).
 
 Resources, actions, functions, and ephemeral resources are not registered. IAM role and operation
-data sources are not registered until their exact namespace, version, operation ID, and path satisfy
-the API evidence gate.
+data sources are registered as provisional read-only surfaces from the locked IAM v4.0 artifact and
+the pinned `ioplane/nutanix-api` discovery source. They remain outside the accepted compatibility
+surface until exact Nutanix MCP corroboration and product verification are complete.
 
 ## API evidence gate
 
@@ -108,8 +111,10 @@ Every Terraform type must define:
 7. product verification required after the main product implementation is complete.
 
 The selected Developer Portal artifact is the wire authority. Exact-path API corroboration must
-agree with it. Missing or conflicting evidence blocks implementation. Extracted or live evidence
-may identify a documentation gap but does not silently replace the locked public contract.
+agree with it. Missing or conflicting evidence blocks promotion to the accepted compatibility
+surface. A provisional implementation may proceed when the Portal operation contract and immutable
+discovery provenance are complete, but it must carry an explicit evidence debt and cannot be released
+or used for downstream compatibility claims until the missing corroboration is resolved.
 
 ## References
 

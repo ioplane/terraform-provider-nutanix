@@ -85,10 +85,14 @@ Every implemented operation must bind:
 2. exact operation ID, HTTP method, and versioned path;
 3. request, success, error, pagination, task, and ETag semantics;
 4. the hand-written namespace DTOs and Terraform state mapping;
-5. independent exact-path corroboration where available.
+5. independent exact-path corroboration where available;
+6. an explicit provisional marker when MCP corroboration is unavailable.
 
 An operation absent from the selected public lock remains research input and is not an
 implementation contract. Placeholder or incomplete schemas never define public Terraform state.
+Source-artifact implementations may be provisional when the selected Portal lock contains the
+complete operation and schema; missing MCP corroboration blocks acceptance, release, and downstream
+compatibility claims until resolved.
 
 ## References
 
