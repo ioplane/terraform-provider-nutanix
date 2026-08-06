@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -28,39 +29,17 @@ var (
 	ErrInvalidRole = errors.New("iam role response is invalid")
 
 	listOperationsPolicy = odata.Policy{
-		RequiredSelect: []string{
-			"associatedEndpointList",
-			"clientName",
-			"createdTime",
-			"description",
-			"displayName",
-			"entityType",
-			"extId",
-			"lastUpdatedTime",
-			"operationType",
-			"relatedOperationList",
-			"tenantId",
-		},
+		RequiredSelect: strings.Fields(
+			"associatedEndpointList clientName createdTime description displayName entityType extId " +
+				"lastUpdatedTime operationType relatedOperationList tenantId",
+		),
 	}
 	listRolesPolicy = odata.Policy{
-		RequiredSelect: []string{
-			"accessibleClients",
-			"accessibleClientsCount",
-			"accessibleEntityTypes",
-			"accessibleEntityTypesCount",
-			"assignedUserGroupsCount",
-			"assignedUsersCount",
-			"clientName",
-			"createdBy",
-			"createdTime",
-			"description",
-			"displayName",
-			"extId",
-			"isSystemDefined",
-			"lastUpdatedTime",
-			"operations",
-			"tenantId",
-		},
+		RequiredSelect: strings.Fields(
+			"accessibleClients accessibleClientsCount accessibleEntityTypes accessibleEntityTypesCount " +
+				"assignedUserGroupsCount assignedUsersCount clientName createdBy createdTime description " +
+				"displayName extId isSystemDefined lastUpdatedTime operations tenantId",
+		),
 	}
 )
 
