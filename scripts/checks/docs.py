@@ -17,6 +17,8 @@ GENERATED_DOCS = (
     "data-sources/categories_v2.md",
     "data-sources/clusters_v2.md",
     "data-sources/images_v2.md",
+    "data-sources/operations_v2.md",
+    "data-sources/roles_v2.md",
     "data-sources/subnet_v2.md",
     "index.md",
 )

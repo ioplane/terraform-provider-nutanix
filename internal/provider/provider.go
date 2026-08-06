@@ -18,12 +18,15 @@ import (
 	"github.com/ioplane/terraform-provider-nutanix/internal/auth"
 	"github.com/ioplane/terraform-provider-nutanix/internal/capability"
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/clustermgmt"
+	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/iam"
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/networking"
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/prism"
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/vmm"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/category"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/cluster"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/image"
+	"github.com/ioplane/terraform-provider-nutanix/internal/service/operation"
+	"github.com/ioplane/terraform-provider-nutanix/internal/service/role"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/subnet"
 	"github.com/ioplane/terraform-provider-nutanix/internal/transport"
 )
@@ -38,6 +41,7 @@ type configuredProviderData struct {
 	client         *transport.Client
 	capabilities   *capability.Registry
 	clusterClient  *clustermgmt.Client
+	iamClient      *iam.Client
 	categoryClient *prism.Client
 	imageClient    *vmm.Client
 	subnetClient   *networking.Client
@@ -212,6 +216,10 @@ func composeProviderData(
 	if err != nil {
 		return configuredProviderData{}, productClientConfigurationError()
 	}
+	iamClient, err := iam.NewClient(client)
+	if err != nil {
+		return configuredProviderData{}, productClientConfigurationError()
+	}
 	capabilities, err := capability.NewRegistry(nil)
 	if err != nil {
 		return configuredProviderData{}, newConfigurationError(
@@ -224,6 +232,7 @@ func composeProviderData(
 		client:         client,
 		capabilities:   capabilities,
 		clusterClient:  clusterClient,
+		iamClient:      iamClient,
 		categoryClient: categoryClient,
 		imageClient:    imageClient,
 		subnetClient:   subnetClient,
@@ -306,6 +315,16 @@ func (d configuredProviderData) CategoryReader() category.Reader {
 	return d.categoryClient
 }
 
+// OperationReader returns the configured IAM operation read capability.
+func (d configuredProviderData) OperationReader() operation.Reader {
+	return d.iamClient
+}
+
+// RoleReader returns the configured IAM role read capability.
+func (d configuredProviderData) RoleReader() role.Reader {
+	return d.iamClient
+}
+
 // ImageReader returns the configured VMM image read capability.
 func (d configuredProviderData) ImageReader() image.Reader {
 	return d.imageClient
@@ -328,5 +347,7 @@ func (p *nutanixProvider) DataSources(context.Context) []func() datasource.DataS
 		category.NewDataSource,
 		image.NewDataSource,
 		subnet.NewDataSource,
+		role.NewDataSource,
+		operation.NewDataSource,
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -29,6 +30,64 @@ type Values struct {
 type DiagnosticText struct {
 	Title  string
 	Detail string
+}
+
+// QueryAttributes returns the shared optional OData query schema.
+func QueryAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"page":     PageAttribute(),
+		"limit":    LimitAttribute(),
+		"filter":   StringAttribute("OData filter expression."),
+		"order_by": StringAttribute("OData order-by expression."),
+		"select": StringAttribute(
+			"Comma-separated simple properties to request in addition to required state fields.",
+		),
+	}
+}
+
+// CommonEntityAttributes returns the shared computed identity and audit fields.
+func CommonEntityAttributes() map[string]schema.Attribute {
+	result := make(map[string]schema.Attribute, 7)
+	for _, name := range []string{
+		"ext_id", "tenant_id", "display_name", "description", "client_name", "created_time", "last_updated_time",
+	} {
+		result[name] = ComputedString()
+	}
+	return result
+}
+
+// ExtendAttributes returns a copy of base with product-specific fields added.
+func ExtendAttributes(base map[string]schema.Attribute, extra map[string]schema.Attribute) map[string]schema.Attribute {
+	result := make(map[string]schema.Attribute, len(base)+len(extra))
+	for name, attribute := range base {
+		result[name] = attribute
+	}
+	for name, attribute := range extra {
+		result[name] = attribute
+	}
+	return result
+}
+
+// ComputedString returns a computed Terraform string attribute.
+func ComputedString() schema.StringAttribute { return schema.StringAttribute{Computed: true} }
+
+// ComputedInt64 returns a computed Terraform integer attribute.
+func ComputedInt64() schema.Int64Attribute { return schema.Int64Attribute{Computed: true} }
+
+// ComputedBool returns a computed Terraform boolean attribute.
+func ComputedBool() schema.BoolAttribute { return schema.BoolAttribute{Computed: true} }
+
+// ComputedList returns a computed Terraform list attribute.
+func ComputedList(elementType attr.Type) schema.ListAttribute {
+	return schema.ListAttribute{Computed: true, ElementType: elementType}
+}
+
+// ComputedID returns the shared computed query identity attribute.
+func ComputedID() schema.StringAttribute {
+	return schema.StringAttribute{
+		Computed:    true,
+		Description: "Deterministic identity of the caller-supplied list query.",
+	}
 }
 
 // PageAttribute returns the shared zero-based page schema.
