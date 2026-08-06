@@ -853,7 +853,11 @@ def _release_policy_diagnostics(root: Path) -> list[str]:
     if dispatch.get("if") != "steps.release.outputs.prs_created == 'true'":
         diagnostics.append("Release PR dispatch condition differs")
     dispatch_run = dispatch.get("run")
-    if not isinstance(dispatch_run, str) or "gh workflow run ci.yml --ref" not in dispatch_run:
+    if (
+        not isinstance(dispatch_run, str)
+        or "gh workflow run ci.yml --ref" not in dispatch_run
+        or '--repo "${GITHUB_REPOSITORY}"' not in dispatch_run
+    ):
         diagnostics.append("Release PR must dispatch the Foundation workflow")
     build = by_name.get("Build release artifacts in Podman", {})
     if build.get("run") != "./dev task release:build" or "env" in build:
