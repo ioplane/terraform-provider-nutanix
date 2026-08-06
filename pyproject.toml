@@ -1,0 +1,52 @@
+[project]
+name = "terraform-provider-nutanix-dev"
+version = "0.0.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "podman==5.8.0",
+    "podman-compose==1.6.0",
+    "PyYAML==6.0.3",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.1",
+    "rumdl==0.2.50",
+    "ty==0.0.66",
+    "yamllint==1.38.0",
+]
+
+[tool.uv]
+package = false
+required-version = "==0.12.1"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["scripts"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP"]
+
+[tool.ty.environment]
+python-version = "3.13"
+python = "/opt/venv"
+
+[tool.ty.analysis]
+strict-equality-semantics = true
+
+[tool.ty.src]
+include = ["scripts"]
+
+[tool.rumdl]
+disable = ["MD013", "MD076"]
+line-length = 100
+respect-gitignore = true
+
+[tool.rumdl.MD013]
+code-blocks = false
+tables = false
+
+[tool.rumdl.per-file-ignores]
+".github/pull_request_template.md" = ["MD041"]
+"docs/data-sources/*.md" = ["MD012", "MD022", "MD033"]

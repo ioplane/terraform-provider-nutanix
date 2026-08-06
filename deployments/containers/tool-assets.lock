@@ -1,0 +1,21 @@
+# tool version architecture asset sha256
+beads 1.1.2 amd64 beads_1.1.2_linux_amd64.tar.gz a72d71ed374955dc9f83a0f90b54bd7b6a0016709dd1676ae2e368651ed401c2
+beads 1.1.2 arm64 beads_1.1.2_linux_arm64.tar.gz a134015faf4be0a43f8681a8d602eaf0b7c255c957f09d3c933257c8c92fdd10
+gh 2.97.0 amd64 gh_2.97.0_linux_amd64.tar.gz a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112
+gh 2.97.0 arm64 gh_2.97.0_linux_arm64.tar.gz 73ea440ecad9c9e284429997ee6f93577bc6f7bc6fba357ef62c53ad8fb641a5
+golangci-lint 2.12.2 amd64 golangci-lint-2.12.2-linux-amd64.tar.gz 8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553
+golangci-lint 2.12.2 arm64 golangci-lint-2.12.2-linux-arm64.tar.gz 44cd40a8c76c86755375adfeea52cfd3533cb43d7bd647771e0ae065e166df3a
+goreleaser 2.17.1 amd64 goreleaser_Linux_x86_64.tar.gz a99bbc7ae0d8d897b07c4c497a9b62f222558804715ef219d1af05a7e417bc80
+goreleaser 2.17.1 arm64 goreleaser_Linux_arm64.tar.gz 702f03769ac8bcb0e47839c82243cc614ae995633599a98c63062e13ea85f829
+syft 1.50.0 amd64 syft_1.50.0_linux_amd64.tar.gz bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788
+syft 1.50.0 arm64 syft_1.50.0_linux_arm64.tar.gz 887c57cbcc2d0e8c5c110a4571a3fc7150058b24d74f993ee4663516e5c8ce86
+hadolint 2.15.1 amd64 hadolint-linux-x86_64 c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507
+hadolint 2.15.1 arm64 hadolint-linux-arm64 f6198ef8090f404dbb771abfee086eb8c48ac177f30da7fd3510aca35b344b5d
+task 3.52.0 amd64 task_linux_amd64.tar.gz 02c679ffae53dca791804847d78b31731615894e292948397c971c87ac9e95bd
+task 3.52.0 arm64 task_linux_arm64.tar.gz 7e0044108830cec0534577b289564e3b7c83e6df276feb631a1edc63d04e4ebe
+terraform 1.15.8 amd64 terraform_1.15.8_linux_amd64.zip d25ce7b6902013ad905db3d2eab0be4cd905887fe88b81a6171b8d5503c31f3d
+terraform 1.15.8 arm64 terraform_1.15.8_linux_arm64.zip 8891e9dcedc9e3b8950bc6af9d4d8af1f4cfade3062f53b9dc403a89f6ce8c9c
+tfplugindocs 0.25.0 amd64 tfplugindocs_0.25.0_linux_amd64.zip 912bd663e2deafc9ebf54e932bd2adf91bf6b7fcf545d4d9a82dc9597255854c
+tfplugindocs 0.25.0 arm64 tfplugindocs_0.25.0_linux_arm64.zip de1317d79f2783d68a7a090cbe06dea61dbab20c6376c52eadee42e9e8c7c169
+uv 0.12.1 amd64 uv-x86_64-unknown-linux-gnu.tar.gz 90b2f223fb69d19db49e117da601f64978593417988530aa733d456141b4bcbb
+uv 0.12.1 arm64 uv-aarch64-unknown-linux-gnu.tar.gz 769d373e146692c639b5fbaae33b331c297a32e03d30448772051902df52bbf4

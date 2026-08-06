@@ -1,0 +1,45 @@
+services:
+  dev:
+    build:
+      context: ../..
+      dockerfile: deployments/containers/Containerfile.dev
+      args:
+        OCI_VERSION: ${NUTANIX_DEV_VERSION:-0.0.0-dev}
+        OCI_REVISION: ${NUTANIX_DEV_REVISION:-0000000000000000000000000000000000000000}
+        OCI_CREATED: ${NUTANIX_DEV_CREATED:-1970-01-01T00:00:00Z}
+    init: true
+    working_dir: /workspace
+    command: ["sleep", "infinity"]
+    environment:
+      BEADS_DIR: /workspace/.beads
+      GIT_COMMON_DIR: /git-metadata/.git
+      GIT_DIR: /git-metadata/.git/${NUTANIX_GIT_DIR_RELATIVE}
+      GIT_WORK_TREE: /workspace
+    volumes:
+      - ../..:/workspace:z
+      - ${NUTANIX_GIT_COMMON_DIR:?required}:/git-metadata/.git:z
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      - uv-cache:/opt/uv-cache
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -f /run/.containerenv &&
+          command -v go >/dev/null &&
+          command -v terraform >/dev/null &&
+          command -v task >/dev/null &&
+          command -v bd >/dev/null &&
+          command -v gopls >/dev/null &&
+          command -v goreleaser >/dev/null &&
+          command -v syft >/dev/null &&
+          command -v uv >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  go-mod-cache: {}
+  go-build-cache: {}
+  uv-cache: {}

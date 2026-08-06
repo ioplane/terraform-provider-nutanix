@@ -1,0 +1,404 @@
+version: "3"
+
+tasks:
+  _container:
+    internal: true
+    dir: /workspace
+    preconditions:
+      - sh: test -f /run/.containerenv
+        msg: tasks must run inside the Podman development container
+      - sh: test "$(pwd -P)" = /workspace
+        msg: tasks must run from /workspace
+
+  versions:
+    desc: Print the pinned development tool versions
+    deps: [_container]
+    dir: /workspace
+    silent: true
+    cmds:
+      - |
+        set -eu
+        semver() {
+          grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1
+        }
+        emit() {
+          name="$1"
+          shift
+          value="$("$@" 2>&1 | semver)"
+          test -n "${value}"
+          printf '%s=%s\n' "${name}" "${value}"
+        }
+        emit go go version
+        emit terraform terraform version
+        emit task task --version
+        emit beads bd version
+        python -c 'from importlib.metadata import version; print("podman-py=" + version("podman"))'
+        python -c 'from importlib.metadata import version; print("podman-compose=" + version("podman-compose"))'
+        emit uv uv --version
+        emit ruff ruff --version
+        emit rumdl rumdl --version
+        emit ty ty --version
+        emit yamllint yamllint --version
+        emit golangci-lint golangci-lint version
+        emit goreleaser goreleaser --version
+        emit syft syft version
+        emit tfplugindocs tfplugindocs --version
+        value="$(govulncheck -version 2>&1 | sed -nE 's/.*govulncheck@v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
+        test -n "${value}"
+        printf 'govulncheck=%s\n' "${value}"
+        emit gopls gopls version
+        emit gh gh --version
+        emit hadolint hadolint --version
+
+  python:lock:
+    desc: Resolve the exact Python development dependency lock
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - uv lock
+
+  python:format:
+    desc: Format role-oriented Python CLI sources
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - ruff format scripts
+
+  python:format:check:
+    desc: Reject Python CLI formatting drift without rewriting sources
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - ruff format --check scripts
+
+  python:lint:
+    desc: Lint role-oriented Python CLI sources
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - ruff check scripts
+
+  python:typecheck:
+    desc: Type-check role-oriented Python CLI sources
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - ty check scripts
+
+  artifacts:discover:
+    desc: Discover the live GA-first Nutanix API selection without writes
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.artifacts.nutanix discover
+
+  artifacts:update:
+    desc: Download and lock official Nutanix API artifacts
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.artifacts.nutanix update
+
+  artifacts:verify:
+    desc: Verify the live Nutanix registry and every locked artifact
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.artifacts.nutanix verify
+
+  artifacts:count:
+    desc: Print the locked Nutanix namespace count
+    deps: [_container]
+    dir: /workspace
+    silent: true
+    cmds:
+      - python -m scripts.artifacts.nutanix count
+
+  repo:staged-cache-check:
+    desc: Reject staged Nutanix vendor artifact bodies
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.checks.staged
+
+  repo:check:
+    desc: Validate repository structure and tracked-file safety
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.checks.repository
+
+  pins:check:
+    desc: Validate immutable container, tool, action, and artifact pins
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.checks.pins
+
+  tools:check:
+    desc: Validate exact machine-readable toolbox versions
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - python -m scripts.checks.tool_versions
+
+  docs:check:
+    desc: Lint repository docs, validate internal links, and reject generated drift
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - >-
+        git ls-files -z --cached --others --exclude-standard -- '*.md' '*.markdown' |
+        sort -zu |
+        xargs -0 --no-run-if-empty rumdl check --color never
+      - >-
+        git ls-files -z --cached --others --exclude-standard -- '*.yml' '*.yaml' |
+        sort -zu |
+        xargs -0 --no-run-if-empty yamllint --strict --config-file .yamllint.yml
+      - python -m scripts.checks.docs_links
+      - SOURCE_DATE_EPOCH=1700000000 python -m scripts.checks.docs
+
+  docs:generate:
+    desc: Generate the tracked offline Terraform Framework reference pages
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - >-
+        python -m scripts.generate.provider_docs
+        --root /workspace
+        --source-date-epoch 1700000000
+
+  oci:check:
+    desc: Lint the Containerfile and validate the complete Compose model
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - hadolint --config .hadolint.yaml deployments/containers/Containerfile.dev
+      - >-
+        NUTANIX_GIT_COMMON_DIR=/tmp/nutanix-compose-validation
+        NUTANIX_GIT_DIR_RELATIVE=worktrees/validation
+        podman-compose
+        --dry-run
+        -f deployments/compose/compose.dev.yml
+        config >/dev/null
+
+  release:check:
+    desc: Validate the GoReleaser release-shape configuration
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - goreleaser check .goreleaser.yml
+
+  release:snapshot:
+    desc: Build unpublished release artifacts and SBOMs from the current revision
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - goreleaser release --clean --snapshot --skip=publish
+
+  release:build:
+    desc: Build unpublished artifacts and SBOMs for the current exact SemVer tag
+    deps: [_container]
+    dir: /workspace
+    preconditions:
+      - sh: git describe --exact-match --tags --match 'v[0-9]*' >/dev/null
+        msg: release builds require an exact SemVer tag
+      - sh: test -z "$(git status --porcelain --untracked-files=no)"
+        msg: release builds require a clean tracked worktree
+    cmds:
+      - goreleaser release --clean --skip=publish
+
+  go:mod:init:
+    desc: Initialize the exact Go module and download pinned provider dependencies
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - |
+        set -eu
+        test "$(go env GOTOOLCHAIN)" = local
+        if test ! -e go.mod; then
+          go mod init github.com/ioplane/terraform-provider-nutanix
+          go mod edit -go=1.26.0
+          go mod edit -require=github.com/hashicorp/terraform-plugin-framework@v1.19.0
+          go mod edit -require=github.com/hashicorp/terraform-plugin-testing@v1.16.0
+        fi
+        grep -Fx 'module github.com/ioplane/terraform-provider-nutanix' go.mod
+        grep -Fx 'go 1.26.0' go.mod
+        ! grep -Eq '^toolchain ' go.mod
+        grep -Eq '^[[:space:]]+github.com/hashicorp/terraform-plugin-framework v1.19.0$' go.mod
+        grep -Eq '^[[:space:]]+github.com/hashicorp/terraform-plugin-testing v1.16.0$' go.mod
+        ! grep -Eiq 'nutanix.*sdk|sdk.*nutanix' go.mod
+        go mod download
+
+  go:mod:tidy:
+    desc: Tidy the Go module with the local pinned toolchain
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - |
+        set -eu
+        test "$(go env GOTOOLCHAIN)" = local
+        go mod tidy
+        grep -Fx 'module github.com/ioplane/terraform-provider-nutanix' go.mod
+        grep -Fx 'go 1.26.0' go.mod
+        ! grep -Eq '^toolchain ' go.mod
+        grep -Eq '^[[:space:]]+github.com/hashicorp/terraform-plugin-framework v1.19.0$' go.mod
+        grep -Eq '^[[:space:]]+github.com/hashicorp/terraform-plugin-testing v1.16.0$' go.mod
+        ! grep -Eiq 'nutanix.*sdk|sdk.*nutanix' go.mod
+
+  go:test:
+    desc: Run Go tests
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - go test {{.CLI_ARGS | default "./..."}}
+
+  go:test:fuzz:
+    desc: Run bounded sequential Go fuzz smoke tests
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - >-
+        go test ./internal/transport
+        -run '^$'
+        -fuzz '^FuzzOriginAndPathConstruction$'
+        -fuzztime=1s
+        -parallel=1
+      - >-
+        go test ./internal/transport
+        -run '^$'
+        -fuzz '^FuzzBoundedErrorResponse$'
+        -fuzztime=1s
+        -parallel=1
+      - >-
+        go test ./internal/transport
+        -run '^$'
+        -fuzz '^FuzzParseRetryAfter$'
+        -fuzztime=1s
+        -parallel=1
+      - >-
+        go test ./internal/transport
+        -run '^$'
+        -fuzz '^FuzzPaginationMetadata$'
+        -fuzztime=1s
+        -parallel=1
+      - >-
+        go test ./internal/nutanix/prism
+        -run '^$'
+        -fuzz '^FuzzTaskResponseDecode$'
+        -fuzztime=1s
+        -parallel=1
+
+  go:test:protocol:
+    desc: Prove the provider loads through Terraform Plugin Protocol 6 without live Nutanix access
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - |
+        test "$(terraform version -json | python -c 'import json, sys; print(json.load(sys.stdin)["terraform_version"])')" = 1.15.8
+        TF_ACC=1 \
+        TF_ACC_PROVIDER_NAMESPACE=ioplane \
+        TF_ACC_TERRAFORM_PATH=/usr/local/bin/terraform \
+        TF_ACC_TERRAFORM_VERSION=1.15.8 \
+        go test -count=1 \
+          -run '^(TestServeOptions|TestAccProviderProtocol6|TestConfigureTLSConfigurationErrorProtocolDiagnostic)$' \
+          ./cmd/terraform-provider-nutanix ./internal/provider
+
+  go:format:
+    desc: Format Go source
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - gofmt -w cmd internal
+
+  go:format:check:
+    desc: Reject Go formatting drift without rewriting sources
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - |
+        set -eu
+        unformatted="$(gofmt -l cmd internal)"
+        if test -n "${unformatted}"; then
+          printf '%s\n' "${unformatted}"
+          exit 1
+        fi
+
+  go:vet:
+    desc: Run Go static analysis
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - go vet ./...
+
+  go:lint:
+    desc: Run the pinned Go linter
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - golangci-lint run ./...
+
+  go:vuln:
+    desc: Scan reachable Go code with the pinned vulnerability checker
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - govulncheck ./...
+
+  go:test:race:
+    desc: Run Go tests with the race detector and container compiler
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - CGO_ENABLED=1 go test -race ./...
+
+  go:build:
+    desc: Build the protocol 6 provider binary
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - mkdir -p .cache/bin
+      - >-
+        CGO_ENABLED=0 go build -trimpath
+        -ldflags '-X main.version=0.0.0-dev'
+        -o .cache/bin/terraform-provider-nutanix
+        ./cmd/terraform-provider-nutanix
+      - go version -m .cache/bin/terraform-provider-nutanix
+
+  package:test:
+    desc: Prove deterministic packaging and checksum-selected offline installation
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - >-
+        SOURCE_DATE_EPOCH=1700000000
+        python -m scripts.package.provider test --version 0.0.0-dev
+
+  all:
+    desc: Run the lightweight implementation build and static gate
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - task: repo:check
+      - task: repo:staged-cache-check
+      - task: artifacts:verify
+      - task: python:format:check
+      - task: python:lint
+      - task: python:typecheck
+      - task: go:format:check
+      - task: go:vet
+      - task: go:lint
+      - task: go:vuln
+      - task: docs:check
+      - task: oci:check
+      - task: pins:check
+      - task: tools:check
+      - task: release:check
+      - task: go:build
+
+  verify:
+    desc: Alias for the lightweight implementation build and static gate
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - task: all
