@@ -45,15 +45,23 @@ release intent follows these rules:
 | `feat!:` or `BREAKING CHANGE:` | Minor before `v1.0.0`; major from `v1.0.0` |
 | Non-user-facing maintenance type | No release by default |
 
-The repository manifest stores the last released version. The initial manifest value is `0.0.0`;
-the first qualifying feature commit proposes `v0.1.0`.
+The repository manifest stores the last released version. Before the first tag, exactly one
+Conventional Commit carries the footer below to select the pre-major bootstrap version:
+
+```text
+Release-As: 0.1.0
+```
+
+After `v0.1.0`, the manifest is the version authority and bootstrap `Release-As` footers are not
+used.
 
 ## Workflow behavior
 
 1. The release workflow runs Release Please on every push to `main`.
 2. When Release Please creates or updates a release PR using `GITHUB_TOKEN`, the workflow explicitly
-   dispatches `ci.yml` on the release branch because token-created pull requests do not emit another
-   pull-request workflow event.
+   dispatches `ci.yml` on the release branch with an explicit repository selector because
+   token-created pull requests do not emit another pull-request workflow event and the release job
+   has no checkout at that stage.
 3. The release PR remains subject to branch protection, required review, and the `Foundation` check.
 4. Merging the release PR produces the changelog update, SemVer tag, and GitHub Release.
 5. The same workflow checks out the emitted tag, starts the private Podman API service, builds the

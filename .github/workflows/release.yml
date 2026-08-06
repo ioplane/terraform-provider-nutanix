@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           release_branch="$(jq -er '.headBranchName' <<<"${RELEASE_PR}")"
-          gh workflow run ci.yml --ref "${release_branch}"
+          gh workflow run ci.yml --ref "${release_branch}" --repo "${GITHUB_REPOSITORY}"
 
       - name: Check out release tag
         if: steps.release.outputs.release_created == 'true'
