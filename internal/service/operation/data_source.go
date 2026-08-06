@@ -85,45 +85,29 @@ func NewDataSource() datasource.DataSource {
 type iamDataSourceDescriptor struct{}
 
 func (iamDataSourceDescriptor) Schema() schema.Schema {
+	attributes := listquery.QueryAttributes()
+	operationAttributes := listquery.ExtendAttributes(listquery.CommonEntityAttributes(), map[string]schema.Attribute{
+		"entity_type":            listquery.ComputedString(),
+		"operation_type":         listquery.ComputedString(),
+		"related_operation_list": listquery.ComputedList(types.StringType),
+		"associated_endpoint_list": schema.ListNestedAttribute{
+			Computed: true,
+			NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
+				"api_version":  listquery.ComputedString(),
+				"endpoint_url": listquery.ComputedString(),
+				"http_method":  listquery.ComputedString(),
+			}},
+		},
+	})
+	attributes["id"] = listquery.ComputedID()
+	attributes["operation_entities"] = schema.ListNestedAttribute{
+		Computed:     true,
+		Description:  "IAM operations returned by Nutanix.",
+		NestedObject: schema.NestedAttributeObject{Attributes: operationAttributes},
+	}
 	return schema.Schema{
 		Description: "Lists Nutanix IAM operations through the provisional IAM v4.0 API surface.",
-		Attributes: map[string]schema.Attribute{
-			"page":     listquery.PageAttribute(),
-			"limit":    listquery.LimitAttribute(),
-			"filter":   listquery.StringAttribute("OData filter expression."),
-			"order_by": listquery.StringAttribute("OData order-by expression."),
-			"select": listquery.StringAttribute(
-				"Comma-separated simple properties to request in addition to required state fields.",
-			),
-			"id": schema.StringAttribute{
-				Computed:    true,
-				Description: "Deterministic identity of the caller-supplied list query.",
-			},
-			"operation_entities": schema.ListNestedAttribute{
-				Computed:    true,
-				Description: "IAM operations returned by Nutanix.",
-				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
-					"ext_id":                 schema.StringAttribute{Computed: true},
-					"tenant_id":              schema.StringAttribute{Computed: true},
-					"display_name":           schema.StringAttribute{Computed: true},
-					"description":            schema.StringAttribute{Computed: true},
-					"entity_type":            schema.StringAttribute{Computed: true},
-					"client_name":            schema.StringAttribute{Computed: true},
-					"created_time":           schema.StringAttribute{Computed: true},
-					"last_updated_time":      schema.StringAttribute{Computed: true},
-					"operation_type":         schema.StringAttribute{Computed: true},
-					"related_operation_list": schema.ListAttribute{Computed: true, ElementType: types.StringType},
-					"associated_endpoint_list": schema.ListNestedAttribute{
-						Computed: true,
-						NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
-							"api_version":  schema.StringAttribute{Computed: true},
-							"endpoint_url": schema.StringAttribute{Computed: true},
-							"http_method":  schema.StringAttribute{Computed: true},
-						}},
-					},
-				}},
-			},
-		},
+		Attributes:  attributes,
 	}
 }
 

@@ -82,43 +82,27 @@ func NewDataSource() datasource.DataSource {
 type iamDataSourceDescriptor struct{}
 
 func (iamDataSourceDescriptor) Schema() schema.Schema {
+	attributes := listquery.QueryAttributes()
+	roleAttributes := listquery.ExtendAttributes(listquery.CommonEntityAttributes(), map[string]schema.Attribute{
+		"operations":                    listquery.ComputedList(types.StringType),
+		"accessible_clients":            listquery.ComputedList(types.StringType),
+		"accessible_entity_types":       listquery.ComputedList(types.StringType),
+		"accessible_clients_count":      listquery.ComputedInt64(),
+		"accessible_entity_types_count": listquery.ComputedInt64(),
+		"assigned_users_count":          listquery.ComputedInt64(),
+		"assigned_user_groups_count":    listquery.ComputedInt64(),
+		"created_by":                    listquery.ComputedString(),
+		"is_system_defined":             listquery.ComputedBool(),
+	})
+	attributes["id"] = listquery.ComputedID()
+	attributes["role_entities"] = schema.ListNestedAttribute{
+		Computed:     true,
+		Description:  "IAM roles returned by Nutanix.",
+		NestedObject: schema.NestedAttributeObject{Attributes: roleAttributes},
+	}
 	return schema.Schema{
 		Description: "Lists Nutanix IAM roles through the provisional IAM v4.0 API surface.",
-		Attributes: map[string]schema.Attribute{
-			"page":     listquery.PageAttribute(),
-			"limit":    listquery.LimitAttribute(),
-			"filter":   listquery.StringAttribute("OData filter expression."),
-			"order_by": listquery.StringAttribute("OData order-by expression."),
-			"select": listquery.StringAttribute(
-				"Comma-separated simple properties to request in addition to required state fields.",
-			),
-			"id": schema.StringAttribute{
-				Computed:    true,
-				Description: "Deterministic identity of the caller-supplied list query.",
-			},
-			"role_entities": schema.ListNestedAttribute{
-				Computed:    true,
-				Description: "IAM roles returned by Nutanix.",
-				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
-					"ext_id":                        schema.StringAttribute{Computed: true},
-					"tenant_id":                     schema.StringAttribute{Computed: true},
-					"display_name":                  schema.StringAttribute{Computed: true},
-					"client_name":                   schema.StringAttribute{Computed: true},
-					"description":                   schema.StringAttribute{Computed: true},
-					"operations":                    schema.ListAttribute{Computed: true, ElementType: types.StringType},
-					"accessible_clients":            schema.ListAttribute{Computed: true, ElementType: types.StringType},
-					"accessible_entity_types":       schema.ListAttribute{Computed: true, ElementType: types.StringType},
-					"accessible_clients_count":      schema.Int64Attribute{Computed: true},
-					"accessible_entity_types_count": schema.Int64Attribute{Computed: true},
-					"assigned_users_count":          schema.Int64Attribute{Computed: true},
-					"assigned_user_groups_count":    schema.Int64Attribute{Computed: true},
-					"created_time":                  schema.StringAttribute{Computed: true},
-					"last_updated_time":             schema.StringAttribute{Computed: true},
-					"created_by":                    schema.StringAttribute{Computed: true},
-					"is_system_defined":             schema.BoolAttribute{Computed: true},
-				}},
-			},
-		},
+		Attributes:  attributes,
 	}
 }
 
