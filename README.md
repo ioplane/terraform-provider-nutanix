@@ -30,6 +30,11 @@ Hand-written Terraform Plugin Framework provider for the Nutanix Cloud Platform.
 | `nutanix_categories_v2` | Prism v4.3 | [Schema](docs/data-sources/categories_v2.md) |
 | `nutanix_images_v2` | VMM v4.2 | [Schema](docs/data-sources/images_v2.md) |
 | `nutanix_subnet_v2` | Networking v4.3 | [Schema](docs/data-sources/subnet_v2.md) |
+| `nutanix_roles_v2` | IAM v4.0 (provisional) | [Schema](docs/data-sources/roles_v2.md) |
+| `nutanix_operations_v2` | IAM v4.0 (provisional) | [Schema](docs/data-sources/operations_v2.md) |
+
+IAM role and operation data sources remain outside the accepted compatibility surface until exact
+Nutanix MCP corroboration and product verification are complete.
 
 Resources, actions, functions, and ephemeral resources are not registered.
 
