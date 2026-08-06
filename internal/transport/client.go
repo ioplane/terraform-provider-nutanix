@@ -220,7 +220,8 @@ func (c *Client) Execute(ctx context.Context, request Request) (response Respons
 			retryable    bool
 			retryAfter   string
 		)
-		if attemptErr != nil {
+		switch {
+		case attemptErr != nil:
 			if !sameKnownError(canonicalErrorCause(attemptErr), ErrRedirectRefused) {
 				closeResponseBody(rawResponse)
 			}
@@ -230,9 +231,9 @@ func (c *Client) Execute(ctx context.Context, request Request) (response Respons
 				cause = ErrRequestFailed
 			}
 			currentError = newTransportError(operation, transportKindForCause(cause), cause)
-		} else if rawResponse == nil {
+		case rawResponse == nil:
 			currentError = newTransportError(operation, TransportFailureRequest, ErrRequestFailed)
-		} else {
+		default:
 			if rawResponse.Body == nil {
 				rawResponse.Body = http.NoBody
 			}
@@ -461,32 +462,6 @@ func cloneBytes2D(source [][]byte) [][]byte {
 		cloned[index] = slices.Clone(source[index])
 	}
 	return cloned
-}
-
-func newRequestPlan(
-	method string,
-	pathTemplate string,
-	pathParameters map[string]string,
-	headers http.Header,
-	jsonBody []byte,
-) requestPlan {
-	parametersCopy := make(map[string]string, len(pathParameters))
-	for name, value := range pathParameters {
-		parametersCopy[name] = value
-	}
-	var bodyCopy []byte
-	if jsonBody != nil {
-		bodyCopy = make([]byte, len(jsonBody))
-		copy(bodyCopy, jsonBody)
-	}
-	return requestPlan{
-		method:         method,
-		pathTemplate:   pathTemplate,
-		pathParameters: parametersCopy,
-		query:          nil,
-		headers:        headers.Clone(),
-		jsonBody:       bodyCopy,
-	}
 }
 
 func (c *Client) executeAttempt(ctx context.Context, plan requestPlan) (*http.Response, error) {

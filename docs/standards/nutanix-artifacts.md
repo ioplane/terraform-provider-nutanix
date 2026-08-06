@@ -81,12 +81,34 @@ discrepancy index. It contributes product identities, candidate operations, vers
 provenance pointers. It is not a wire-contract source, and every claim inherits the evidence rank
 of the underlying Portal, SDK, provider, shipped-product, or reverse-engineering source.
 
+The 2026-08-06 update confirms the public licensing Go SDK v4.3 and records three pc.7.6 runtime
+gaps—Projects 2.0, Security Profiles, and Storage Dashboard—that cannot be promoted from offline
+protobuf or binary evidence. It also expands Objects Manager and LCM reverse-engineering notes;
+those internal RPC inventories remain product research and do not define REST routes.
+
 The pinned machine index contains 31 API families, 2,516 raw rows, and 2,166 distinct JSON records.
 Independent validation found 1,435 non-null path fields and 1,081 null paths. A non-null field does
 not establish an operation-exact route: the 372 Prism v2 rows reduce to 71 method and path pairs,
 and the 350-row Flow Security Central and NAI inventories are byte-identical. Human summaries in
 the same snapshot still report 2,521 total operations, 925 v4 operations, and 1,477 concrete paths;
 those values conflict with the machine records and are rejected.
+
+The Licensing v4.3 implementation slice is bound to the official artifact fetched from
+`/api/v1/namespaces/licensing/versions/v4.3/yaml` on 2026-08-06. The artifact is OpenAPI 3.0.1,
+minimum negotiation `v4.3`, and declares Basic and API-key security. It defines 17 paths and 19
+operations; the applied-license inventory is `listLicenses`, `GET
+/licensing/v4.3/config/licenses`, success `200`, with a `data` array of
+`licensing.v4.3.config.License`. Nutanix MCP document `api-swagger-licensing-v4.3-all` independently
+reports version `4.3.1`, 17 endpoints, 19 operations, and the same versioned path. The provider
+maps only the stable inventory fields and keeps consumption details behind explicit `expand`.
+
+The same artifact defines `listLicenseKeys`, `GET /licensing/v4.3/config/license-keys`, success
+`200`, with a `data` array of `licensing.v4.3.config.LicenseKey`. Its caller query contract is
+`$page`, `$limit`, `$filter`, `$orderby`, `$expand`, and `$select`; the reviewed expansion names
+are `assignmentDetails` and `associationDetails`. The implementation maps the base key fields,
+assignment mappings, and key associations by hand. MCP corroboration covers the Licensing v4.3
+document and exact endpoint inventory; product acceptance remains deferred under the repository
+verification policy.
 
 Secondary evidence is accepted only when all applicable integrity checks pass:
 

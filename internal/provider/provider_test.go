@@ -211,15 +211,15 @@ func TestProviderSchemaValidators(t *testing.T) {
 	}
 }
 
-func TestProviderRegistersNoTypes(t *testing.T) {
+func TestProviderRegistersImplementedTypes(t *testing.T) {
 	t.Parallel()
 
 	configured := New("test")()
-	if got := len(configured.Resources(context.Background())); got != 0 {
-		t.Fatalf("resource count = %d, want 0", got)
+	if got := len(configured.Resources(context.Background())); got != 4 {
+		t.Fatalf("resource count = %d, want 4", got)
 	}
-	if got := len(configured.DataSources(context.Background())); got != 0 {
-		t.Fatalf("data source count = %d, want 0", got)
+	if got := len(configured.DataSources(context.Background())); got != 8 {
+		t.Fatalf("data source count = %d, want 8", got)
 	}
 }
 

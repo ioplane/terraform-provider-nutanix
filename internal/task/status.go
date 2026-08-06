@@ -61,15 +61,36 @@ func (Projection) Format(state fmt.State, _ rune) {
 	_, _ = state.Write([]byte("task.Projection(redacted)"))
 }
 
+// EntityReference is a bounded reference to an entity affected by a task.
+// It is used for identity recovery after asynchronous create operations.
+type EntityReference struct {
+	ExtID string
+	Rel   string
+	Name  string
+}
+
+// Format prevents entity identifiers and names from entering diagnostics.
+func (EntityReference) Format(state fmt.State, _ rune) {
+	_, _ = state.Write([]byte("task.EntityReference(redacted)"))
+}
+
 // Snapshot is one bounded, vendor-neutral task observation.
 type Snapshot struct {
 	ExtID              string
 	Status             Status
 	ProgressPercentage int32
+	EntitiesAffected   []EntityReference
 	Errors             []Projection
 	Warnings           []Projection
 	LastUpdatedTime    time.Time
 	ServerDelay        time.Duration
+}
+
+// AsyncOperation identifies a submitted asynchronous API operation by its
+// Prism task identifier. Product clients alias this stable transport-neutral
+// value instead of defining parallel operation types.
+type AsyncOperation struct {
+	TaskID string
 }
 
 // Format prevents task identifiers and remote projections from entering diagnostics.

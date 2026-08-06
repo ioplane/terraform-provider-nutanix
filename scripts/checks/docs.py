@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
@@ -17,10 +18,16 @@ GENERATED_DOCS = (
     "data-sources/categories_v2.md",
     "data-sources/clusters_v2.md",
     "data-sources/images_v2.md",
+    "data-sources/license_keys_v2.md",
+    "data-sources/licenses_v2.md",
     "data-sources/operations_v2.md",
     "data-sources/roles_v2.md",
     "data-sources/subnet_v2.md",
     "index.md",
+    "resources/category.md",
+    "resources/image_placement_policy.md",
+    "resources/storage_container.md",
+    "resources/subnet.md",
 )
 DEFAULT_SOURCE_DATE_EPOCH = 1_700_000_000
 TFPLUGINDOCS_PROVIDER_ADDRESS = "registry.terraform.io/hashicorp/nutanix"
@@ -124,6 +131,40 @@ def render_generated_docs(
         root,
         _environment(temporary),
     )
+    # tfplugindocs emits two empty template paragraphs before a resource schema
+    # when no examples directory is populated for that resource. Keep the
+    # generated page deterministic and compatible with the repository Markdown
+    # lint contract without changing the upstream generator globally.
+    category_page = rendered / "resources" / "category.md"
+    if category_page.is_file():
+        category_page.write_text(
+            category_page.read_text().replace("\n\n\n\n<!-- schema", "\n\n<!-- schema")
+        )
+    subnet_page = rendered / "resources" / "subnet.md"
+    if subnet_page.is_file():
+        subnet_page.write_text(
+            subnet_page.read_text().replace("\n\n\n\n<!-- schema", "\n\n<!-- schema")
+        )
+    storage_container_page = rendered / "resources" / "storage_container.md"
+    if storage_container_page.is_file():
+        storage_container_page.write_text(
+            storage_container_page.read_text().replace("\n\n\n\n<!-- schema", "\n\n<!-- schema")
+        )
+    placement_policy_page = rendered / "resources" / "image_placement_policy.md"
+    if placement_policy_page.is_file():
+        placement = placement_policy_page.read_text()
+        placement = placement.replace("\n\n\n\n<!-- schema", "\n\n<!-- schema")
+        # tfplugindocs emits raw anchors for nested attributes. They are
+        # redundant because the generated headings remain stable and violate
+        # the repository Markdown lint contract (MD033/MD022/MD012).
+        placement = re.sub(
+            r"#nestedatt--([a-z0-9_]+)",
+            r"#nested-schema-for-\1",
+            placement,
+        )
+        placement = re.sub(r'^<a id="nestedatt--[^"]+"></a>\n', "", placement, flags=re.MULTILINE)
+        placement = re.sub(r"\n{3,}(?=### Nested Schema)", "\n\n", placement)
+        placement_policy_page.write_text(placement)
 
 
 def main(

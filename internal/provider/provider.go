@@ -19,15 +19,21 @@ import (
 	"github.com/ioplane/terraform-provider-nutanix/internal/capability"
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/clustermgmt"
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/iam"
+	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/licensing"
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/networking"
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/prism"
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/vmm"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/category"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/cluster"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/image"
+	license "github.com/ioplane/terraform-provider-nutanix/internal/service/license"
+	licensekey "github.com/ioplane/terraform-provider-nutanix/internal/service/licensekey"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/operation"
+	"github.com/ioplane/terraform-provider-nutanix/internal/service/placementpolicy"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/role"
+	"github.com/ioplane/terraform-provider-nutanix/internal/service/storagecontainer"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/subnet"
+	ntnxtask "github.com/ioplane/terraform-provider-nutanix/internal/task"
 	"github.com/ioplane/terraform-provider-nutanix/internal/transport"
 )
 
@@ -45,6 +51,7 @@ type configuredProviderData struct {
 	categoryClient *prism.Client
 	imageClient    *vmm.Client
 	subnetClient   *networking.Client
+	licenseClient  *licensing.Client
 }
 
 // New returns a factory for the Nutanix provider.
@@ -200,23 +207,35 @@ func composeProviderData(
 	if err != nil {
 		return configuredProviderData{}, mapClientConfigurationError(err)
 	}
-	clusterClient, err := clustermgmt.NewClient(client)
-	if err != nil {
-		return configuredProviderData{}, productClientConfigurationError()
-	}
 	categoryClient, err := prism.NewClient(client)
 	if err != nil {
 		return configuredProviderData{}, productClientConfigurationError()
 	}
-	imageClient, err := vmm.NewClient(client)
+	taskReader, err := prism.NewReader(client)
 	if err != nil {
 		return configuredProviderData{}, productClientConfigurationError()
 	}
-	subnetClient, err := networking.NewClient(client)
+	taskWaiter, err := ntnxtask.NewWaiter(taskReader)
+	if err != nil {
+		return configuredProviderData{}, productClientConfigurationError()
+	}
+	clusterClient, err := clustermgmt.NewClientWithTaskWaiter(client, taskWaiter)
+	if err != nil {
+		return configuredProviderData{}, productClientConfigurationError()
+	}
+	imageClient, err := vmm.NewClientWithTaskWaiter(client, taskWaiter)
+	if err != nil {
+		return configuredProviderData{}, productClientConfigurationError()
+	}
+	subnetClient, err := networking.NewClientWithTaskWaiter(client, taskWaiter)
 	if err != nil {
 		return configuredProviderData{}, productClientConfigurationError()
 	}
 	iamClient, err := iam.NewClient(client)
+	if err != nil {
+		return configuredProviderData{}, productClientConfigurationError()
+	}
+	licenseClient, err := licensing.NewClient(client)
 	if err != nil {
 		return configuredProviderData{}, productClientConfigurationError()
 	}
@@ -236,6 +255,7 @@ func composeProviderData(
 		categoryClient: categoryClient,
 		imageClient:    imageClient,
 		subnetClient:   subnetClient,
+		licenseClient:  licenseClient,
 	}, nil
 }
 
@@ -315,6 +335,11 @@ func (d configuredProviderData) CategoryReader() category.Reader {
 	return d.categoryClient
 }
 
+// CategoryWriter returns the configured Prism category mutation capability.
+func (d configuredProviderData) CategoryWriter() category.Writer {
+	return d.categoryClient
+}
+
 // OperationReader returns the configured IAM operation read capability.
 func (d configuredProviderData) OperationReader() operation.Reader {
 	return d.iamClient
@@ -335,9 +360,39 @@ func (d configuredProviderData) SubnetReader() subnet.Reader {
 	return d.subnetClient
 }
 
+// SubnetWriter returns the configured Networking subnet mutation capability.
+func (d configuredProviderData) SubnetWriter() subnet.Writer {
+	return d.subnetClient
+}
+
+// LicenseReader returns the configured Licensing read capability.
+func (d configuredProviderData) LicenseReader() license.Reader {
+	return d.licenseClient
+}
+
+// LicenseKeyReader returns the configured Licensing key-inventory capability.
+func (d configuredProviderData) LicenseKeyReader() licensekey.Reader {
+	return d.licenseClient
+}
+
+// StorageContainerWriter returns the configured Cluster Management storage-container capability.
+func (d configuredProviderData) StorageContainerWriter() storagecontainer.Writer {
+	return d.clusterClient
+}
+
+// PlacementPolicyWriter returns the configured VMM placement-policy capability.
+func (d configuredProviderData) PlacementPolicyWriter() placementpolicy.Writer {
+	return d.imageClient
+}
+
 // Resources returns the managed-resource registry.
 func (p *nutanixProvider) Resources(context.Context) []func() resource.Resource {
-	return nil
+	return []func() resource.Resource{
+		category.NewResource,
+		subnet.NewResource,
+		storagecontainer.NewResource,
+		placementpolicy.NewResource,
+	}
 }
 
 // DataSources returns the implemented read-only data-source registry.
@@ -349,5 +404,7 @@ func (p *nutanixProvider) DataSources(context.Context) []func() datasource.DataS
 		subnet.NewDataSource,
 		role.NewDataSource,
 		operation.NewDataSource,
+		license.NewDataSource,
+		licensekey.NewDataSource,
 	}
 }

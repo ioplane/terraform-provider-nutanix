@@ -83,6 +83,17 @@ object names, and remote identifiers are excluded.
 | `nutanix_subnet_v2` | `getSubnetById` | `GET /api/networking/v4.3/config/subnets/{extId}` |
 | `nutanix_roles_v2` | `listRoles` | `GET /api/iam/v4.0/authz/roles` |
 | `nutanix_operations_v2` | `listOperations` | `GET /api/iam/v4.0/authz/operations` |
+| `nutanix_licenses_v2` | `listLicenses` | `GET /api/licensing/v4.3/config/licenses` |
+| `nutanix_license_keys_v2` | `listLicenseKeys` | `GET /api/licensing/v4.3/config/license-keys` |
+
+## Managed resources
+
+| Terraform resource | Operations | Locked wire paths | State identity |
+| --- | --- | --- | --- |
+| `nutanix_category` (provisional) | `createCategory`, `getCategoryById`, `updateCategoryById`, `deleteCategoryById` | `POST /api/prism/v4.3/config/categories`; `GET`, `PUT`, `DELETE /api/prism/v4.3/config/categories/{extId}` | Prism `extId` UUID |
+| `nutanix_subnet` (provisional) | `createSubnet`, `getSubnetById`, `updateSubnetById`, `deleteSubnetById` | `POST`, `GET`, `PUT`, `DELETE /api/networking/v4.3/config/subnets[/{extId}]` | Networking `extId` UUID |
+| `nutanix_storage_container` (provisional) | `createStorageContainer`, `getStorageContainerById`, `updateStorageContainerById`, `deleteStorageContainerById` | `POST`, `GET`, `PUT`, `DELETE /api/clustermgmt/v4.2/config/storage-containers[/{extId}]` | Cluster Management `extId` UUID |
+| `nutanix_image_placement_policy` (provisional) | `createPlacementPolicy`, `getPlacementPolicyById`, `updatePlacementPolicyById`, `deletePlacementPolicyById` | `POST`, `GET`, `PUT`, `DELETE /api/vmm/v4.2/images/config/placement-policies[/{extId}]` | VMM `extId` UUID |
 
 List state IDs are lowercase SHA-256 values over the Terraform type and normalized caller-only
 query identity. Namespace-added projections and server defaults do not alter identity. The subnet
@@ -93,10 +104,58 @@ Missing collections map to typed Terraform null lists; explicit empty JSON array
 lists. Required remote identity fields are validated before state is written. Generated public
 schemas are available under [`docs/data-sources/`](data-sources/).
 
-Resources, actions, functions, and ephemeral resources are not registered. IAM role and operation
-data sources are registered as provisional read-only surfaces from the locked IAM v4.0 artifact and
-the pinned `ioplane/nutanix-api` discovery source. They remain outside the accepted compatibility
-surface until exact Nutanix MCP corroboration and product verification are complete.
+The Licensing data source exposes the applied-license inventory from Licensing v4.3. Its
+`expand` query is optional and is passed through only for reviewed OData relationships such as
+`consumptionDetails`; expanded cluster consumption is nullable when the relationship is not
+requested. The first slice is read-only and does not expose license-key mutation or assignment
+actions.
+
+The license-key data source exposes the read-only `listLicenseKeys` inventory. Its selected state
+fields are the Portal `licensing.v4.3.config.LicenseKey` base projection; `assignmentDetails` and
+`associationDetails` are nullable unless requested through `expand`. Both data sources use the
+caller-only normalized OData query identity for deterministic state IDs, and preserve explicit
+empty collections separately from absent or null collections.
+
+The category resource manages only user-defined categories. `key` is immutable and forces
+replacement; `value`, `description`, and `owner_uuid` are mutable through the conditional PUT.
+The API requires `If-Match` for updates, so the client reads the current ETag immediately before
+the mutation. `type` is computed and associations remain read-only data-source projections in this
+slice. Import accepts a Prism `extId` and the first refresh populates the complete state.
+
+The category resource, IAM role data source, and IAM operation data source are provisional surfaces
+from locked artifacts and remain outside the accepted compatibility surface until exact Nutanix MCP
+corroboration and product verification are complete. Actions, functions, and ephemeral resources
+are not registered.
+
+Networking subnet mutations are asynchronous. The hand-written client accepts only the mutable
+`SubnetSpec` projection, requires `NTNX-Request-Id` for replayable `POST`, `PUT`, and `DELETE`,
+requires `If-Match` for `PUT`, and validates both the `202` response `Location` header
+and the `prism.v4.3.config.TaskReference` body before handing the task ID to the shared waiter.
+After a successful wait, the shared Prism task projection exposes bounded `entitiesAffected`
+references; subnet identity is accepted only from an entity whose relation is
+`networking:config:subnet` and whose `extId` is a valid UUID. Missing, malformed, or duplicate
+subnet references fail closed. The Terraform resource is provisional until its complete state
+mapping is product-tested against an authorized endpoint; no downstream compatibility claim is
+made yet.
+
+Cluster Management storage-container mutations are asynchronous. Create requires the target
+`cluster_ext_id` as the reviewed `X-Cluster-Id` header, while update requires the current opaque
+`ETag`; all mutations require `NTNX-Request-Id` and validate `202`, `Location`, and the task
+reference before polling. The resource does not send read-only projections such as capacity
+limits, owner, storage-pool, cluster name, or external-storage identity. `is_shared` is modeled
+as create-time immutable and `ignore_small_files` is applied only to delete. Task identity is
+accepted only from exactly one `entitiesAffected` reference with relation
+`clustermgmt:config:storage-containers` and a valid UUID. Product verification and operation-level
+MCP corroboration remain deferred; this is a provisional compatibility surface.
+
+VMM image-placement-policy mutations are asynchronous. Create and update require
+`NTNX-Request-Id`; update additionally requires the current `ETag`; delete is asynchronous but
+has no request-ID requirement in the selected v4.2 OpenAPI contract. The resource sends only the
+mutable name, description, placement type, and bounded category filters. Policy identity is
+accepted only from exactly one `entitiesAffected` reference with relation
+`vmm:images:config:placement-policy` and a valid UUID. Suspend/resume actions are intentionally
+not exposed in this CRUD slice. Product verification and operation-level MCP corroboration remain
+deferred; this is a provisional compatibility surface.
 
 ## API evidence gate
 

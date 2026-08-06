@@ -8,7 +8,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/odata"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/listquery"
@@ -131,9 +130,4 @@ func (d *DataSource[Entity, State]) Read(
 		return
 	}
 	response.Diagnostics.Append(response.State.Set(ctx, &state)...)
-}
-
-// IDValue is the common state identity assignment used by product mappers.
-func IDValue(id string) types.String {
-	return types.StringValue(id)
 }

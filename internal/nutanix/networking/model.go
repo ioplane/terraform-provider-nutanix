@@ -1,5 +1,11 @@
 package networking
 
+import (
+	"context"
+
+	"github.com/ioplane/terraform-provider-nutanix/internal/task"
+)
+
 // Subnet is the reviewed getSubnetById projection used by Terraform state mapping.
 type Subnet struct {
 	ExtID                  *string     `json:"extId"`
@@ -15,6 +21,31 @@ type Subnet struct {
 	IsExternal             *bool       `json:"isExternal"`
 	BridgeName             *string     `json:"bridgeName"`
 	IsAdvancedNetworking   *bool       `json:"isAdvancedNetworking"`
+}
+
+// SubnetSpec is the mutable subset accepted by the Networking subnet write
+// operations. Read-only projections are intentionally not reused in requests.
+type SubnetSpec struct {
+	Name                   string      `json:"name"`
+	Description            *string     `json:"description,omitempty"`
+	SubnetType             string      `json:"subnetType"`
+	NetworkID              *int64      `json:"networkId,omitempty"`
+	IPConfig               *[]IPConfig `json:"ipConfig,omitempty"`
+	ClusterReference       *string     `json:"clusterReference,omitempty"`
+	VirtualSwitchReference *string     `json:"virtualSwitchReference,omitempty"`
+	VPCReference           *string     `json:"vpcReference,omitempty"`
+	IsNATEnabled           *bool       `json:"isNatEnabled,omitempty"`
+	IsExternal             *bool       `json:"isExternal,omitempty"`
+	BridgeName             *string     `json:"bridgeName,omitempty"`
+	IsAdvancedNetworking   *bool       `json:"isAdvancedNetworking,omitempty"`
+}
+
+// AsyncOperation keeps the Networking client API aligned with the shared task contract.
+type AsyncOperation = task.AsyncOperation
+
+// TaskWaiter is the reusable asynchronous-operation port shared by products.
+type TaskWaiter interface {
+	Wait(context.Context, string) (task.Snapshot, error)
 }
 
 // IPConfig is the dual-stack IP configuration projection.

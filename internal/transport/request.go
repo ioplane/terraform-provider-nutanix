@@ -172,6 +172,7 @@ func validOperation(value string) bool {
 	for index := 0; index < len(value); index++ {
 		character := value[index]
 		if (character >= 'a' && character <= 'z') ||
+			(index > 0 && character >= 'A' && character <= 'Z') ||
 			(index > 0 && character >= '0' && character <= '9') ||
 			(index > 0 && strings.ContainsRune("._-", rune(character))) {
 			continue

@@ -12,6 +12,15 @@ type Category struct {
 	DetailedAssociations *[]AssociationDetail  `json:"detailedAssociations"`
 }
 
+// CategorySpec is the writable category projection accepted by Prism.
+// Read-only identity and association fields are intentionally excluded.
+type CategorySpec struct {
+	Key         string  `json:"key"`
+	Value       string  `json:"value"`
+	Description *string `json:"description,omitempty"`
+	OwnerUUID   *string `json:"ownerUuid,omitempty"`
+}
+
 // AssociationSummary is the state-safe category association count projection.
 type AssociationSummary struct {
 	CategoryID    *string `json:"categoryId"`

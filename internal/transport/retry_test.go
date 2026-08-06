@@ -423,7 +423,8 @@ func TestRetryAfterDeltaAndHTTPDateAreServerMinimums(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				var calls int
-				client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				var client *Client
+				client = testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
 					calls++
 					status := http.StatusServiceUnavailable
 					if calls == 2 {
@@ -431,7 +432,8 @@ func TestRetryAfterDeltaAndHTTPDateAreServerMinimums(t *testing.T) {
 					}
 					response := responseWithBody(request, status, "body")
 					if status != http.StatusOK {
-						response.Header.Set("Retry-After", test.header(time.Now()))
+						value := test.header(client.now().UTC())
+						response.Header.Set("Retry-After", value)
 					}
 					return response, nil
 				}))
@@ -814,7 +816,7 @@ func TestRetryRejectsCyclicRoundTripperErrorPromptly(t *testing.T) {
 		return nil, cycle
 	}))
 
-	_, err := executeWithTimeout(t, client, mustRetryRequest(t, RetryRead, false, false, nil))
+	err := executeWithTimeout(t, client, mustRetryRequest(t, RetryRead, false, false, nil))
 	if !errors.Is(err, ErrRequestFailed) {
 		t.Fatalf("Execute() error = %v, want ErrRequestFailed", err)
 	}
@@ -841,7 +843,7 @@ func TestRetryRejectsCyclicResponseReadErrorPromptly(t *testing.T) {
 		}, nil
 	}))
 
-	_, err := executeWithTimeout(t, client, mustRetryRequest(t, RetryRead, false, false, nil))
+	err := executeWithTimeout(t, client, mustRetryRequest(t, RetryRead, false, false, nil))
 	if !errors.Is(err, ErrResponseRead) {
 		t.Fatalf("Execute() error = %v, want ErrResponseRead", err)
 	}
@@ -866,7 +868,7 @@ func TestRetryRejectsDynamicallyUncomparableRoundTripperErrorPromptly(t *testing
 		return nil, failure
 	}))
 
-	_, err := executeWithTimeout(t, client, mustRetryRequest(t, RetryRead, false, false, nil))
+	err := executeWithTimeout(t, client, mustRetryRequest(t, RetryRead, false, false, nil))
 	if !errors.Is(err, ErrRequestFailed) {
 		t.Fatalf("Execute() error = %v, want ErrRequestFailed", err)
 	}
@@ -893,7 +895,7 @@ func TestRetryRejectsDynamicallyUncomparableResponseReadErrorPromptly(t *testing
 		}, nil
 	}))
 
-	_, err := executeWithTimeout(t, client, mustRetryRequest(t, RetryRead, false, false, nil))
+	err := executeWithTimeout(t, client, mustRetryRequest(t, RetryRead, false, false, nil))
 	if !errors.Is(err, ErrResponseRead) {
 		t.Fatalf("Execute() error = %v, want ErrResponseRead", err)
 	}
@@ -990,12 +992,11 @@ func classifyWithTimeout(t *testing.T, err error) bool {
 	}
 }
 
-func executeWithTimeout(t *testing.T, client *Client, request Request) (Response, error) {
+func executeWithTimeout(t *testing.T, client *Client, request Request) error {
 	t.Helper()
 	type result struct {
-		response Response
-		err      error
-		panic    any
+		err   error
+		panic any
 	}
 	results := make(chan result, 1)
 	go func() {
@@ -1004,17 +1005,17 @@ func executeWithTimeout(t *testing.T, client *Client, request Request) (Response
 			completed.panic = recover()
 			results <- completed
 		}()
-		completed.response, completed.err = client.Execute(context.Background(), request)
+		_, completed.err = client.Execute(context.Background(), request)
 	}()
 	select {
 	case completed := <-results:
 		if completed.panic != nil {
 			t.Fatalf("Execute() panicked: %v", completed.panic)
 		}
-		return completed.response, completed.err
+		return completed.err
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("Execute() did not return within bounded time")
-		return Response{}, nil
+		return nil
 	}
 }
 

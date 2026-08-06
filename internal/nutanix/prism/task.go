@@ -23,16 +23,18 @@ import (
 // https://developers.nutanix.com/api/v1/namespaces/prism/versions/v4.3/yaml,
 // OpenAPI SHA-256 efb04f7aff22e65b3abaf099d3a4cbd113b27d18375f504ea384ed432bb13976.
 const (
-	getTaskOperation                 = "prism.get_task_by_id"
-	getTaskPath                      = "/api/prism/v4.3/config/tasks/{extId}"
-	getTaskSelect                    = "extId,status,progressPercentage,errorMessages,warnings,completionDetails,lastUpdatedTime"
-	getTaskBodyLimit           int64 = 4 << 20
-	maximumTaskErrors                = 100
-	maximumTaskWarnings              = 50
-	maximumCompletionItems           = 50
-	maximumProjectionBytes           = 128
-	maximumCompletionListItems       = 100
-	maximumCompletionMapItems        = 20
+	getTaskOperation                  = "prism.get_task_by_id"
+	getTaskPath                       = "/api/prism/v4.3/config/tasks/{extId}"
+	getTaskSelect                     = "extId,status,progressPercentage,entitiesAffected,errorMessages,warnings,completionDetails,lastUpdatedTime"
+	getTaskBodyLimit            int64 = 4 << 20
+	maximumTaskErrors                 = 100
+	maximumTaskWarnings               = 50
+	maximumEntitiesAffected           = 300
+	maximumEntityReferenceBytes       = 4096
+	maximumCompletionItems            = 50
+	maximumProjectionBytes            = 128
+	maximumCompletionListItems        = 100
+	maximumCompletionMapItems         = 20
 )
 
 var (
@@ -103,10 +105,17 @@ type taskDTO struct {
 	ExtID              string                `json:"extId"`
 	Status             string                `json:"status"`
 	ProgressPercentage *int32                `json:"progressPercentage"`
+	EntitiesAffected   []entityReferenceDTO  `json:"entitiesAffected"`
 	ErrorMessages      []appMessageDTO       `json:"errorMessages"`
 	Warnings           []appMessageDTO       `json:"warnings"`
 	CompletionDetails  []completionDetailDTO `json:"completionDetails"`
 	LastUpdatedTime    *time.Time            `json:"lastUpdatedTime"`
+}
+
+type entityReferenceDTO struct {
+	ExtID string `json:"extId"`
+	Rel   string `json:"rel"`
+	Name  string `json:"name"`
 }
 
 type appMessageDTO struct {
@@ -143,8 +152,13 @@ func decodeTask(body []byte, expectedExtID string) (ntnxtask.Snapshot, error) {
 	if data.ExtID != expectedExtID || data.Status == "" ||
 		len(data.ErrorMessages) > maximumTaskErrors ||
 		len(data.Warnings) > maximumTaskWarnings ||
+		len(data.EntitiesAffected) > maximumEntitiesAffected ||
 		len(data.CompletionDetails) > maximumCompletionItems {
 		return ntnxtask.Snapshot{}, ErrInvalidTaskResponse
+	}
+	entities, err := projectEntities(data.EntitiesAffected)
+	if err != nil {
+		return ntnxtask.Snapshot{}, err
 	}
 	progress := int32(0)
 	if data.ProgressPercentage != nil {
@@ -161,10 +175,36 @@ func decodeTask(body []byte, expectedExtID string) (ntnxtask.Snapshot, error) {
 		ExtID:              data.ExtID,
 		Status:             mapTaskStatus(data.Status),
 		ProgressPercentage: progress,
+		EntitiesAffected:   entities,
 		Errors:             projectMessages(data.ErrorMessages),
 		Warnings:           projectMessages(data.Warnings),
 		LastUpdatedTime:    updated,
 	}, nil
+}
+
+func projectEntities(values []entityReferenceDTO) ([]ntnxtask.EntityReference, error) {
+	projected := make([]ntnxtask.EntityReference, 0, len(values))
+	for _, value := range values {
+		if !validEntityReferenceText(value.ExtID, true) ||
+			!validEntityReferenceText(value.Rel, true) ||
+			!validEntityReferenceText(value.Name, false) {
+			return nil, ErrInvalidTaskResponse
+		}
+		projected = append(projected, ntnxtask.EntityReference{
+			ExtID: value.ExtID,
+			Rel:   value.Rel,
+			Name:  value.Name,
+		})
+	}
+	return projected, nil
+}
+
+func validEntityReferenceText(value string, required bool) bool {
+	if value == "" {
+		return !required
+	}
+	return len(value) <= maximumEntityReferenceBytes && utf8.ValidString(value) &&
+		!strings.ContainsAny(value, "\x00\r\n")
 }
 
 func mapTaskStatus(status string) ntnxtask.Status {

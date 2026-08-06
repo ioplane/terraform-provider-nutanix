@@ -51,14 +51,14 @@ provider "nutanix" {
 	if diagnosticsHaveErrors(schemaResponse.Diagnostics) {
 		t.Fatalf("GetProviderSchema() diagnostics = %v", schemaResponse.Diagnostics)
 	}
-	if len(schemaResponse.ResourceSchemas) != 0 ||
-		len(schemaResponse.DataSourceSchemas) != 0 ||
+	if len(schemaResponse.ResourceSchemas) != 4 ||
+		len(schemaResponse.DataSourceSchemas) != 8 ||
 		len(schemaResponse.Functions) != 0 ||
 		len(schemaResponse.EphemeralResourceSchemas) != 0 ||
 		len(schemaResponse.ListResourceSchemas) != 0 ||
 		len(schemaResponse.ActionSchemas) != 0 ||
 		len(schemaResponse.StateStoreSchemas) != 0 {
-		t.Fatal("Protocol 6 schema unexpectedly registers a product Terraform type")
+		t.Fatal("Protocol 6 schema registered an unexpected Terraform type")
 	}
 
 	sensitive := map[string]bool{}

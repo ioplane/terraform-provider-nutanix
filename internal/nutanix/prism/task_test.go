@@ -18,7 +18,7 @@ import (
 	"github.com/ioplane/terraform-provider-nutanix/internal/transport"
 )
 
-const lockedTaskSelect = "extId,status,progressPercentage,errorMessages,warnings,completionDetails,lastUpdatedTime"
+const lockedTaskSelect = "extId,status,progressPercentage,entitiesAffected,errorMessages,warnings,completionDetails,lastUpdatedTime"
 
 func TestGetTaskByIDUsesLockedPrismV43WireContract(t *testing.T) {
 	t.Parallel()
@@ -168,6 +168,30 @@ func TestGetTaskByIDProjectsOnlyBoundedSafeFields(t *testing.T) {
 				t.Fatalf("snapshot leaked %q: %q", canary, rendered)
 			}
 		}
+	}
+}
+
+func TestGetTaskByIDProjectsAffectedEntities(t *testing.T) {
+	t.Parallel()
+
+	entities := []map[string]any{{
+		"extId": "7ccae44f-d067-4d49-a4d0-7409e2455894",
+		"rel":   "networking:config:subnet",
+		"name":  "subnet-safe-name",
+	}}
+	reader, closeServer := testReader(t, func(*http.Request) (int, string) {
+		return http.StatusOK, taskEnvelopeWithEntities("task-id", "SUCCEEDED", nil, nil, nil, entities)
+	})
+	defer closeServer()
+
+	snapshot, err := reader.Read(context.Background(), "task-id")
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if len(snapshot.EntitiesAffected) != 1 ||
+		snapshot.EntitiesAffected[0].ExtID != entities[0]["extId"] ||
+		snapshot.EntitiesAffected[0].Rel != entities[0]["rel"] {
+		t.Fatalf("entities = %#v", snapshot.EntitiesAffected)
 	}
 }
 
@@ -362,10 +386,18 @@ func testReader(t *testing.T, handler func(*http.Request) (int, string)) (*Reade
 }
 
 func taskEnvelope(extID, status string, errorMessages, warnings, completionDetails []map[string]any) string {
+	return taskEnvelopeWithEntities(extID, status, errorMessages, warnings, completionDetails, nil)
+}
+
+func taskEnvelopeWithEntities(
+	extID, status string,
+	errorMessages, warnings, completionDetails, entities []map[string]any,
+) string {
 	data := map[string]any{
 		"extId":              extID,
 		"status":             status,
 		"progressPercentage": 50,
+		"entitiesAffected":   entities,
 		"errorMessages":      errorMessages,
 		"warnings":           warnings,
 		"completionDetails":  completionDetails,

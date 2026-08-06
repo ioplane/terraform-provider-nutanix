@@ -247,7 +247,7 @@ def _platform(root: Path) -> tuple[str, str]:
     return goos, goarch
 
 
-def _terraform_environment(root: Path, temporary: Path, cli_config: Path) -> dict[str, str]:
+def _terraform_environment(temporary: Path, cli_config: Path) -> dict[str, str]:
     path = os.environ.get("PATH")
     if not path:
         raise PackageError("PATH is unavailable")
@@ -307,7 +307,6 @@ def _verify_schema(payload: str) -> None:
 
 def _offline_schema_from_package(
     *,
-    root: Path,
     temporary: Path,
     package: PackageResult,
     version: str,
@@ -325,7 +324,7 @@ def _offline_schema_from_package(
         configuration=configuration,
         version=version,
     )
-    environment = _terraform_environment(root, temporary, cli_config)
+    environment = _terraform_environment(temporary, cli_config)
     _command(
         "Terraform init",
         ("terraform", "init", "-backend=false", "-input=false", "-no-color"),
@@ -361,7 +360,6 @@ def generate_offline_schema(
         source_date_epoch=source_date_epoch,
     )
     return _offline_schema_from_package(
-        root=root,
         temporary=temporary / "offline",
         package=package,
         version=version,
@@ -403,7 +401,6 @@ def run_package_test(*, root: Path, version: str, source_date_epoch: int) -> str
         if first.archive.read_bytes() != second.archive.read_bytes():
             raise PackageError("repeated provider packages differ")
         schema = _offline_schema_from_package(
-            root=root,
             temporary=temporary / "offline",
             package=first,
             version=version,

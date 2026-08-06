@@ -32,11 +32,22 @@ Hand-written Terraform Plugin Framework provider for the Nutanix Cloud Platform.
 | `nutanix_subnet_v2` | Networking v4.3 | [Schema](docs/data-sources/subnet_v2.md) |
 | `nutanix_roles_v2` | IAM v4.0 (provisional) | [Schema](docs/data-sources/roles_v2.md) |
 | `nutanix_operations_v2` | IAM v4.0 (provisional) | [Schema](docs/data-sources/operations_v2.md) |
+| `nutanix_licenses_v2` | Licensing v4.3 (provisional) | [Schema](docs/data-sources/licenses_v2.md) |
+| `nutanix_license_keys_v2` | Licensing v4.3 (provisional) | [Schema](docs/data-sources/license_keys_v2.md) |
+
+| Terraform resource | Nutanix API | Documentation |
+| --- | --- | --- |
+| `nutanix_category` | Prism v4.3 (provisional) | [Schema](docs/resources/category.md) |
+| `nutanix_subnet` | Networking v4.3 (provisional) | [Schema](docs/resources/subnet.md) |
+| `nutanix_storage_container` | Cluster Management v4.2 (provisional) | [Schema](docs/resources/storage_container.md) |
+| `nutanix_image_placement_policy` | VMM v4.2 (provisional) | [Schema](docs/resources/image_placement_policy.md) |
 
 IAM role and operation data sources remain outside the accepted compatibility surface until exact
 Nutanix MCP corroboration and product verification are complete.
 
-Resources, actions, functions, and ephemeral resources are not registered.
+The category resource is the first managed-resource slice. It remains outside the accepted
+compatibility surface until product verification and exact MCP operation-level corroboration are
+complete. Actions, functions, and ephemeral resources are not registered.
 
 ## Architecture
 

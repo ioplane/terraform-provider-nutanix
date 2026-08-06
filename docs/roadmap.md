@@ -25,13 +25,13 @@ flowchart LR
 | Foundation | Reproducible Podman environment, Protocol 6 provider, repository gates | Complete |
 | Kernel | Configuration, authentication, transport, retry, pagination, ETags, task and capability services | Complete |
 | Read-only surface | Cluster, category, image, and subnet data sources | Implemented; product verification pending |
-| Core resources | Categories, projects, subnets, storage containers, policies, and image placement | Planned |
+| Core resources | Categories, projects, subnets, storage containers, policies, and image placement | Category, subnet, storage-container, and image-placement-policy slices implemented; product verification deferred |
 | Compute and storage | Virtual machines, volume groups, affinity, and block storage | Planned |
 | IAM | Provisional roles and operations; directories, users, groups, policies, and user keys planned | Roles and operations implemented; MCP verification pending |
 | Objects compatibility | Object Store lifecycle compatible with public API constraints | Planned |
 | Compatibility surface | Downstream resource, data-source, import, and state compatibility | Planned |
 | Segmented Objects | Draft, precheck, and deployment actions | Planned |
-| Product expansion | All locked GA v4 namespaces | Planned |
+| Product expansion | All locked GA v4 namespaces | Licensing v4.3 applied-license and license-key inventories implemented; remaining namespaces planned |
 | External planes | Foundation, Foundation Central, NDB, Self-Service, NC2, NKP, NDK, NAI, Move, Beam, and Flow Security Central; deprecated NKE compatibility decision only | Planned |
 
 ## API research snapshot
@@ -50,8 +50,11 @@ the Developer Portal lock and exact-operation corroboration remain the implement
 | Portal version agreement | 15 of 18 indexed v4 families | Preserve the repository-selected version per namespace |
 | Version conflicts | AIOps, Prism, and VMM | Qualify separately; do not replace a locked version |
 | Portal-only namespace | Storage `v4.0.a3` preview | Keep preview status explicit and fail closed |
-| Licensing | Index and Portal agree on `v4.3`; 19 candidates | Keep M9 qualification blocked until exact operations pass every gate |
+| Licensing | Portal v4.3.1 and MCP agree on 17 paths/19 operations; `listLicenses` and `listLicenseKeys` are exact | Keep both read-only inventories provisional until product verification and complete operation evidence gates pass |
 | PC 7.6 extraction | Resource Groups, security, Objects data-plane, alerts, and SaaS signals | Treat binary and protobuf results as discrepancy evidence, not REST contracts |
+| PC 7.6 runtime gaps | Projects 2.0, Security Profiles, and Storage Dashboard are Java microservices absent from offline SDK/API artifacts | Require live PC 7.6 extraction and exact public-contract corroboration before adding provider surfaces |
+| Objects and LCM updates | Objects Manager inspection added 86 internal gRPC handlers; LCM inspection added 23 services/193 RPC methods | Keep as product research and discrepancy evidence; do not infer REST routes or Terraform contracts |
+| Licensing correction | `licensing-go-client/v4` v4.3 is publicly available; previous RE-only gap was withdrawn | Use the official v4.3 artifact and exact operation gate; SDK remains comparison-only |
 
 The source snapshot contains stale human summaries that report 2,521 total operations, 925 v4
 operations, and 1,477 concrete paths. The machine records resolve to 2,516, 920, and 1,435 non-null
@@ -83,3 +86,76 @@ deprecated compatibility decision only.
 | Implementation | Hand-written code passes the complete Podman static and build gate |
 | Product verification | Product-scoped tests and authorized acceptance where required |
 | Release | Release PR, protected checks, SemVer tag, archives, checksums, and SBOMs |
+
+## Current slice: Prism category resource
+
+```mermaid
+flowchart LR
+  TF[Terraform plan/apply] --> R[nutanix_category]
+  R --> C[Hand-written Prism client]
+  C -->|POST 201| Create[createCategory]
+  C -->|GET 200 + ETag| Read[getCategoryById]
+  C -->|PUT 200 + If-Match| Update[updateCategoryById]
+  C -->|DELETE 204| Delete[deleteCategoryById]
+```
+
+The selected Nutanix Developer Portal artifact is `api-swagger-prism-v4.3-all` (OpenAPI 3.0.1,
+specification version 4.3.1, minimum negotiation v4.2). Nutanix MCP confirms the Prism document,
+security modes, and both category endpoint templates. The sibling locked OpenAPI artifact supplies
+the operation IDs, request/response schemas, category constraints, and conditional update/delete
+status codes. MCP search currently exposes the Prism specification as coarse document chunks and
+does not return operation-level category chunks; this is explicit evidence debt, not a silent
+promotion. MCP `Release-Notes-v4-API` also records a failure mode for `GetCategoryById` with
+`$expand=detailedAssociations` on categories associated with more than 500 entities or policies.
+The managed resource therefore omits association expansion because its state does not consume
+those projections; the category data source retains explicit expansion semantics. The resource is
+provisional and cannot be released or used for downstream compatibility claims until exact MCP
+ operation corroboration and product verification are closed.
+
+## Current slice: Cluster Management v4.2 storage-container resource
+
+```mermaid
+flowchart LR
+  TF[nutanix_storage_container] --> N[Hand-written Cluster Management client]
+  N -->|POST 202 + Location + X-Cluster-Id| Create[createStorageContainer]
+  N -->|PUT 202 + If-Match| Update[updateStorageContainerById]
+  N -->|DELETE 202 + ignoreSmallFiles| Delete[deleteStorageContainerById]
+  Create --> W[Shared Prism task Reader/Waiter]
+  Update --> W
+  Delete --> W
+```
+
+The official Developer Portal Cluster Management v4.2 artifact (OpenAPI 3.0.1) defines
+`createStorageContainer`, `updateStorageContainerById`, and `deleteStorageContainerById` as
+asynchronous operations returning `202`, a `Location` header, and a Prism task reference. Create
+requires `X-Cluster-Id`; update requires `If-Match`; all mutations require `NTNX-Request-Id`.
+MCP confirms the clustermgmt document and release-note fields `isShared` and
+`externalStorageExtId`; the local `nutanix-api` index supplies the immutable endpoint inventory.
+The implementation keeps mutable request DTOs separate from the read projection and reuses the
+shared transport, task waiter, and exact relation-based entity identity helper. Product
+verification remains deferred by policy.
+
+## Current slice: VMM v4.2 image placement policy
+
+| Evidence | Decision |
+| --- | --- |
+| Developer Portal `vmm/v4.2` | Use `createPlacementPolicy`, `getPlacementPolicyById`, `updatePlacementPolicyById`, and `deletePlacementPolicyById`; CRUD mutations are asynchronous; create/update require `NTNX-Request-Id`, update requires `If-Match`. |
+| Local `nutanix-api` | GA v4.3 endpoint inventory exists; implementation must not silently claim v4.3 until the Developer Portal publishes a matching artifact. |
+| Nutanix MCP | `api-swagger-vmm-v4.2-all` is present; current search is coarse and does not replace operation-level evidence. |
+| Contract focus | Required name, placement type, and bounded category UUID filters; read-only owner/timestamps/enforcement state; suspend/resume remain a separate action decision. |
+
+```mermaid
+flowchart LR
+  TF[nutanix_image_placement_policy] --> N[Hand-written VMM client]
+  N -->|POST 202 + Location| Create[createPlacementPolicy]
+  N -->|PUT 202 + If-Match| Update[updatePlacementPolicyById]
+  N -->|DELETE 202| Delete[deletePlacementPolicyById]
+  Create --> W[Shared Prism task Reader/Waiter]
+  Update --> W
+  Delete --> W
+```
+
+The selected VMM v4.2 artifact defines category-based image and cluster filters, asynchronous
+CRUD operations, and the request-ID/ETag rules recorded above. The implementation keeps the
+mutable request DTO separate from the read projection and uses the shared task identity helper.
+Product verification remains deferred by policy.

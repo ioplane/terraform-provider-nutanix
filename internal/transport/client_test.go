@@ -626,7 +626,7 @@ func TestClientExecuteClosesBodiesOnReadAndCloseFailures(t *testing.T) {
 			client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: test.body, Request: request}, nil
 			}))
-			request := mustTestRequest(t, http.StatusOK, 0)
+			request := mustTestRequest(t)
 			_, err := client.Execute(context.Background(), request)
 			body := test.body.(*failingTrackedBody)
 			if !body.closed.Load() || !errors.Is(err, test.wantCause) {
@@ -643,7 +643,7 @@ func TestClientExecuteTreatsNilResponseBodyAsEmptyAndClosesSafely(t *testing.T) 
 	client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: nil, Request: request}, nil
 	}))
-	response, err := client.Execute(context.Background(), mustTestRequest(t, http.StatusOK, 0))
+	response, err := client.Execute(context.Background(), mustTestRequest(t))
 	if err != nil || len(response.Body()) != 0 {
 		t.Fatalf("Execute(nil body) = %#v, %v; want empty success", response, err)
 	}
@@ -657,7 +657,7 @@ func TestClientExecuteClosesBodyWhenCancellationInterruptsRead(t *testing.T) {
 	client := testClientWithRoundTripper(t, auth.NewAPIKey("safe-api-key"), roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: body, Request: request}, nil
 	}))
-	request := mustTestRequest(t, http.StatusOK, 0)
+	request := mustTestRequest(t)
 	result := make(chan error, 1)
 	go func() {
 		_, err := client.Execute(ctx, request)
@@ -680,7 +680,7 @@ func TestClientExecuteHonorsCallerCancellation(t *testing.T) {
 		<-request.Context().Done()
 		return nil, request.Context().Err()
 	}))
-	request := mustTestRequest(t, http.StatusOK, 0)
+	request := mustTestRequest(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := client.Execute(ctx, request)
@@ -704,7 +704,7 @@ func TestClientExecuteClosesRedirectResponseAndReturnsTypedError(t *testing.T) {
 			Request:    request,
 		}, nil
 	}))
-	_, err := client.Execute(context.Background(), mustTestRequest(t, http.StatusOK, 0))
+	_, err := client.Execute(context.Background(), mustTestRequest(t))
 	if !body.closed.Load() {
 		t.Fatal("redirect response body was not closed")
 	}
@@ -730,7 +730,7 @@ func TestClientExecuteCopiesResponseOutputs(t *testing.T) {
 			Request:    request,
 		}, nil
 	}))
-	response, err := client.Execute(context.Background(), mustTestRequest(t, http.StatusOK, 0))
+	response, err := client.Execute(context.Background(), mustTestRequest(t))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -761,7 +761,7 @@ func TestClientExecuteRejectsZeroRequestWithoutNetwork(t *testing.T) {
 func TestClientExecuteRejectsNilAndZeroClientWithoutPanicOrNetwork(t *testing.T) {
 	t.Parallel()
 
-	request := mustTestRequest(t, http.StatusOK, 0)
+	request := mustTestRequest(t)
 	clients := []*Client{nil, {}}
 	for index, client := range clients {
 		func() {
@@ -795,7 +795,7 @@ func TestClientExecuteRejectsAmbiguousETagAndCorrelationHeaders(t *testing.T) {
 			Request: request,
 		}, nil
 	}))
-	response, err := client.Execute(context.Background(), mustTestRequest(t, http.StatusOK, 0))
+	response, err := client.Execute(context.Background(), mustTestRequest(t))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -873,19 +873,45 @@ func (b *failingTrackedBody) Close() error {
 	return b.closeErr
 }
 
-func mustTestRequest(t *testing.T, expectedStatus int, successLimit int64) Request {
+func mustTestRequest(t *testing.T) Request {
 	t.Helper()
 	request, err := NewRequest(RequestOptions{
 		Operation:        "prism.get_task",
 		Method:           http.MethodGet,
 		PathTemplate:     "/api/test",
-		ExpectedStatuses: []int{expectedStatus},
-		SuccessBodyLimit: successLimit,
+		ExpectedStatuses: []int{http.StatusOK},
+		SuccessBodyLimit: 0,
 	})
 	if err != nil {
 		t.Fatalf("NewRequest() error = %v", err)
 	}
 	return request
+}
+
+func newRequestPlan(
+	method string,
+	pathTemplate string,
+	pathParameters map[string]string,
+	headers http.Header,
+	jsonBody []byte,
+) requestPlan {
+	parametersCopy := make(map[string]string, len(pathParameters))
+	for name, value := range pathParameters {
+		parametersCopy[name] = value
+	}
+	var bodyCopy []byte
+	if jsonBody != nil {
+		bodyCopy = make([]byte, len(jsonBody))
+		copy(bodyCopy, jsonBody)
+	}
+	return requestPlan{
+		method:         method,
+		pathTemplate:   pathTemplate,
+		pathParameters: parametersCopy,
+		query:          nil,
+		headers:        headers.Clone(),
+		jsonBody:       bodyCopy,
+	}
 }
 
 func testClientWithSink(t *testing.T, sink eventSink, base http.RoundTripper) *Client {
