@@ -252,6 +252,7 @@ _FROM = re.compile(r"^FROM\s+(\S+)", re.MULTILINE)
 _DOWNLOAD = re.compile(r'\bdownload\s+"([^"\n]+)"')
 _ACTION = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)", re.MULTILINE)
 _ACTION_SHA = re.compile(r"^[^@]+@[0-9a-f]{40}$")
+_SEMVER = re.compile(r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$")
 _CI_MARKER = re.compile(r"^\s*#\s*tool-version:\s*([A-Z][A-Z0-9_]*)=(\S+)\s*$", re.MULTILINE)
 _HOST_DEVELOPMENT_TOOL = re.compile(
     r"(?<![A-Za-z0-9_.-])(?:/[A-Za-z0-9_.-]+)*/?"
@@ -894,8 +895,24 @@ def _release_policy_diagnostics(root: Path) -> list[str]:
     except (OSError, json.JSONDecodeError):
         diagnostics.append("Release Please manifest is invalid")
         manifest = None
-    if manifest != {".": "0.0.0"}:
+    manifest_version = manifest.get(".") if isinstance(manifest, dict) else None
+    if (
+        not isinstance(manifest, dict)
+        or set(manifest) != {"."}
+        or not isinstance(manifest_version, str)
+        or _SEMVER.fullmatch(manifest_version) is None
+    ):
         diagnostics.append("Release Please manifest differs")
+    elif manifest_version != "0.0.0":
+        changelog_path = root / "CHANGELOG.md"
+        try:
+            changelog = changelog_path.read_text()
+        except OSError:
+            diagnostics.append("Release Please changelog is unavailable")
+        else:
+            heading = re.compile(rf"^## {re.escape(manifest_version)}(?: \(|$)", re.MULTILINE)
+            if heading.search(changelog) is None:
+                diagnostics.append("Release Please manifest and changelog differ")
     if not isinstance(config, dict) or set(config) != {"$schema", "packages"}:
         diagnostics.append("Release Please configuration shape differs")
     else:
