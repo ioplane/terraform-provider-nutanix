@@ -17,17 +17,21 @@ TOOL_ASSET_LOCK = Path("deployments/containers/tool-assets.lock")
 COMPOSE_FILE = Path("deployments/compose/compose.dev.yml")
 MANIFEST_FILE = Path("specs/nutanix/manifest.json")
 CI_FILE = Path(".github/workflows/ci.yml")
+RELEASE_FILE = Path(".github/workflows/release.yml")
+RELEASE_PLEASE_CONFIG_FILE = Path("release-please-config.json")
+RELEASE_PLEASE_MANIFEST_FILE = Path(".release-please-manifest.json")
 DEPENDABOT_FILE = Path(".github/dependabot.yml")
 CODEOWNERS_FILE = Path(".github/CODEOWNERS")
 PULL_REQUEST_TEMPLATE_FILE = Path(".github/pull_request_template.md")
 EXPECTED_BASE_DIGEST = "sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7"
-EXPECTED_CONTAINERFILE_SHA256 = "0497d6873997c505a0b599466f9835e38c9be0e37c70ab2420ad37b98797c056"
+EXPECTED_CONTAINERFILE_SHA256 = "0a0b9c9e5f6a60f901ff4341b7d074339bbbb1d0a121de482548464950ddf095"
 EXPECTED_TOOL_ARGUMENTS = {
     "TASK_VERSION": "3.52.0",
     "BEADS_VERSION": "1.1.2",
     "TERRAFORM_VERSION": "1.15.8",
     "GOLANGCI_LINT_VERSION": "2.12.2",
     "GORELEASER_VERSION": "2.17.1",
+    "SYFT_VERSION": "1.50.0",
     "TFPLUGINDOCS_VERSION": "0.25.0",
     "GOVULNCHECK_VERSION": "1.6.0",
     "GOPLS_VERSION": "0.23.0",
@@ -90,6 +94,14 @@ EXPECTED_TOOL_ASSETS = {
         "goreleaser_Linux_arm64.tar.gz",
         "702f03769ac8bcb0e47839c82243cc614ae995633599a98c63062e13ea85f829",
     ),
+    ("syft", "1.50.0", "amd64"): (
+        "syft_1.50.0_linux_amd64.tar.gz",
+        "bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788",
+    ),
+    ("syft", "1.50.0", "arm64"): (
+        "syft_1.50.0_linux_arm64.tar.gz",
+        "887c57cbcc2d0e8c5c110a4571a3fc7150058b24d74f993ee4663516e5c8ce86",
+    ),
     ("tfplugindocs", "0.25.0", "amd64"): (
         "tfplugindocs_0.25.0_linux_amd64.zip",
         "912bd663e2deafc9ebf54e932bd2adf91bf6b7fcf545d4d9a82dc9597255854c",
@@ -129,6 +141,7 @@ EXPECTED_DOWNLOAD_URLS = {
     "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/${terraform_asset}",
     "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/${golangci_lint_asset}",
     "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/${goreleaser_asset}",
+    "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${syft_asset}",
     "https://github.com/hashicorp/terraform-plugin-docs/releases/download/v${TFPLUGINDOCS_VERSION}/${tfplugindocs_asset}",
     "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${gh_asset}",
     "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${uv_asset}",
@@ -140,6 +153,7 @@ EXPECTED_VERIFY_CALLS = {
     'verify_locked terraform "${TERRAFORM_VERSION}" "${arch}" "${terraform_asset}"',
     'verify_locked golangci-lint "${GOLANGCI_LINT_VERSION}" "${arch}" "${golangci_lint_asset}"',
     'verify_locked goreleaser "${GORELEASER_VERSION}" "${arch}" "${goreleaser_asset}"',
+    'verify_locked syft "${SYFT_VERSION}" "${arch}" "${syft_asset}"',
     'verify_locked tfplugindocs "${TFPLUGINDOCS_VERSION}" "${arch}" "${tfplugindocs_asset}"',
     'verify_locked gh "${GH_VERSION}" "${arch}" "${gh_asset}"',
     'verify_locked uv "${UV_VERSION}" "${arch}" "${uv_asset}"',
@@ -170,7 +184,12 @@ REQUIRED_ARTIFACTS = {"openapi", "postman", "errors"}
 EXPECTED_ACTIONS = {
     "actions/checkout": ("3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
     "astral-sh/setup-uv": ("c771a70e6277c0a99b617c7a806ffedaca235ff9", "v9.0.0"),
+    "googleapis/release-please-action": (
+        "45996ed1f6d02564a971a2fa1b5860e934307cf7",
+        "v5.0.0",
+    ),
 }
+EXPECTED_CI_ACTIONS = {"actions/checkout", "astral-sh/setup-uv"}
 EXPECTED_PODMAN_SERVICE_SCRIPT = """\
 set -euo pipefail
 socket_dir="${RUNNER_TEMP}/podman-api"
@@ -287,6 +306,7 @@ _EXPECTED_COMPOSE_DEV_SERVICE: dict[str, object] = {
                 "test -f /run/.containerenv && command -v go >/dev/null && "
                 "command -v terraform >/dev/null && command -v task >/dev/null && "
                 "command -v bd >/dev/null && command -v gopls >/dev/null && "
+                "command -v goreleaser >/dev/null && command -v syft >/dev/null && "
                 "command -v uv >/dev/null"
             ),
         ],
@@ -513,7 +533,7 @@ def _workflow_diagnostics(root: Path, arguments: dict[str, str]) -> list[str]:
     if not workflow_root.is_dir():
         return diagnostics
     workflow_paths = sorted((*workflow_root.glob("*.yml"), *workflow_root.glob("*.yaml")))
-    if [path.relative_to(root) for path in workflow_paths] != [CI_FILE]:
+    if [path.relative_to(root) for path in workflow_paths] != [CI_FILE, RELEASE_FILE]:
         diagnostics.append("GitHub workflow file set differs")
     for path in workflow_paths:
         relative = path.relative_to(root).as_posix()
@@ -550,8 +570,12 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
     if "env" in document:
         diagnostics.append("CI workflow environment overrides are forbidden")
     triggers = document.get("on")
-    if not isinstance(triggers, dict) or set(triggers) != {"push", "pull_request"}:
-        diagnostics.append("CI triggers must include push and pull_request")
+    if not isinstance(triggers, dict) or set(triggers) != {
+        "push",
+        "pull_request",
+        "workflow_dispatch",
+    }:
+        diagnostics.append("CI triggers must include push, pull_request, and workflow_dispatch")
     elif not isinstance(triggers.get("push"), dict) or triggers["push"].get("branches") != ["main"]:
         diagnostics.append("CI push trigger must select main")
     if document.get("permissions") != {"contents": "read"}:
@@ -604,9 +628,10 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
         if not separator:
             continue
         observed_actions.setdefault(action, []).append(reference)
-    if set(observed_actions) != set(EXPECTED_ACTIONS):
+    if set(observed_actions) != EXPECTED_CI_ACTIONS:
         diagnostics.append("CI action set differs")
-    for action, (sha256, release) in EXPECTED_ACTIONS.items():
+    for action in sorted(EXPECTED_CI_ACTIONS):
+        sha256, release = EXPECTED_ACTIONS[action]
         expected_reference = f"{action}@{sha256}"
         if observed_actions.get(action) != [expected_reference]:
             diagnostics.append(f"CI action pin differs: {action}")
@@ -712,6 +737,179 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
     return diagnostics
 
 
+def _release_policy_diagnostics(root: Path) -> list[str]:
+    workflow_path = root / RELEASE_FILE
+    if not workflow_path.is_file():
+        return [f"GitHub policy file missing: {RELEASE_FILE.as_posix()}"]
+    text = workflow_path.read_text()
+    try:
+        document = yaml.load(text, Loader=yaml.BaseLoader)
+    except yaml.YAMLError:
+        return ["Release workflow is invalid YAML"]
+    if not isinstance(document, dict):
+        return ["Release workflow must be an object"]
+
+    diagnostics: list[str] = []
+    if set(document) != {"name", "on", "permissions", "concurrency", "jobs"}:
+        diagnostics.append("Release workflow key set differs")
+    triggers = document.get("on")
+    if not isinstance(triggers, dict) or set(triggers) != {"push"}:
+        diagnostics.append("Release trigger must be push only")
+    elif not isinstance(triggers.get("push"), dict) or triggers["push"].get("branches") != ["main"]:
+        diagnostics.append("Release push trigger must select main")
+    expected_permissions = {
+        "actions": "write",
+        "contents": "write",
+        "issues": "write",
+        "pull-requests": "write",
+    }
+    if document.get("permissions") != expected_permissions:
+        diagnostics.append("Release permissions differ")
+    concurrency = document.get("concurrency")
+    if not isinstance(concurrency, dict) or concurrency != {
+        "group": "release-${{ github.ref }}",
+        "cancel-in-progress": "false",
+    }:
+        diagnostics.append("Release concurrency differs")
+
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict) or set(jobs) != {"release"}:
+        diagnostics.append("Release job set differs")
+        return diagnostics
+    release_job = jobs.get("release")
+    if not isinstance(release_job, dict):
+        diagnostics.append("Release job is missing")
+        return diagnostics
+    if set(release_job) != {"name", "runs-on", "timeout-minutes", "steps"}:
+        diagnostics.append("Release job model differs")
+    if release_job.get("name") != "Release":
+        diagnostics.append("Release job name differs")
+    if release_job.get("runs-on") != "ubuntu-24.04":
+        diagnostics.append("Release runner must be ubuntu-24.04")
+    if release_job.get("timeout-minutes") != "90":
+        diagnostics.append("Release timeout differs")
+
+    steps = release_job.get("steps")
+    if not isinstance(steps, list) or not all(isinstance(step, dict) for step in steps):
+        diagnostics.append("Release steps must be an array of objects")
+        return diagnostics
+    by_name = {cast(str, step["name"]): step for step in steps if isinstance(step.get("name"), str)}
+    required_names = {
+        "Create or update release pull request",
+        "Dispatch Foundation gate for release pull request",
+        "Check out release tag",
+        "Install pinned uv launcher",
+        "Verify host Podman",
+        "Start private Podman API service",
+        "Build release toolbox",
+        "Build release artifacts in Podman",
+        "Upload release artifacts",
+        "Report container status on failure",
+    }
+    if set(by_name) != required_names or len(steps) != len(required_names):
+        diagnostics.append("Release ordered step set differs")
+
+    observed_actions: dict[str, list[str]] = {}
+    for step in steps:
+        reference = step.get("uses")
+        if not isinstance(reference, str):
+            continue
+        action, separator, _revision = reference.partition("@")
+        if separator:
+            observed_actions.setdefault(action, []).append(reference)
+    if set(observed_actions) != set(EXPECTED_ACTIONS):
+        diagnostics.append("Release action set differs")
+    for action, (sha256, release) in EXPECTED_ACTIONS.items():
+        expected_reference = f"{action}@{sha256}"
+        if observed_actions.get(action) != [expected_reference]:
+            diagnostics.append(f"Release action pin differs: {action}")
+        annotation = re.compile(
+            rf"^\s*uses:\s*{re.escape(expected_reference)}\s+#\s*{re.escape(release)}\s*$",
+            re.MULTILINE,
+        )
+        if annotation.search(text) is None:
+            diagnostics.append(f"Release action release annotation differs: {action}")
+
+    release_step = by_name.get("Create or update release pull request", {})
+    if release_step.get("id") != "release" or release_step.get("with") != {
+        "config-file": "release-please-config.json",
+        "manifest-file": ".release-please-manifest.json",
+    }:
+        diagnostics.append("Release Please invocation differs")
+    checkout = by_name.get("Check out release tag", {})
+    if checkout.get("with") != {
+        "fetch-depth": "0",
+        "persist-credentials": "false",
+        "ref": "${{ steps.release.outputs.tag_name }}",
+    }:
+        diagnostics.append("Release checkout policy differs")
+    setup_uv = by_name.get("Install pinned uv launcher", {})
+    if setup_uv.get("with") != {"version": "0.12.1", "enable-cache": "false"}:
+        diagnostics.append("Release setup-uv policy differs")
+    if f"# tool-version: UV_VERSION={EXPECTED_TOOL_ARGUMENTS['UV_VERSION']}" not in text:
+        diagnostics.append("Release UV tool marker is missing")
+
+    dispatch = by_name.get("Dispatch Foundation gate for release pull request", {})
+    if dispatch.get("if") != "steps.release.outputs.prs_created == 'true'":
+        diagnostics.append("Release PR dispatch condition differs")
+    dispatch_run = dispatch.get("run")
+    if not isinstance(dispatch_run, str) or "gh workflow run ci.yml --ref" not in dispatch_run:
+        diagnostics.append("Release PR must dispatch the Foundation workflow")
+    build = by_name.get("Build release artifacts in Podman", {})
+    if build.get("run") != "./dev task release:build" or "env" in build:
+        diagnostics.append("Release artifact build boundary differs")
+    upload = by_name.get("Upload release artifacts", {})
+    upload_run = upload.get("run")
+    if (
+        not isinstance(upload_run, str)
+        or "gh release upload" not in upload_run
+        or 'test "${#artifacts[@]}" -eq 5' not in upload_run
+    ):
+        diagnostics.append("Release artifact upload policy differs")
+    for step in steps:
+        if step.get("name") in {
+            "Dispatch Foundation gate for release pull request",
+            "Create or update release pull request",
+        }:
+            continue
+        if step.get("if") not in {
+            "steps.release.outputs.release_created == 'true'",
+            "failure() && steps.release.outputs.release_created == 'true'",
+        }:
+            diagnostics.append(f"Release tag gate differs: {step.get('name', '<unnamed>')}")
+
+    config_path = root / RELEASE_PLEASE_CONFIG_FILE
+    manifest_path = root / RELEASE_PLEASE_MANIFEST_FILE
+    try:
+        config = json.loads(config_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        diagnostics.append("Release Please configuration is invalid")
+        config = None
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        diagnostics.append("Release Please manifest is invalid")
+        manifest = None
+    if manifest != {".": "0.0.0"}:
+        diagnostics.append("Release Please manifest differs")
+    if not isinstance(config, dict) or set(config) != {"$schema", "packages"}:
+        diagnostics.append("Release Please configuration shape differs")
+    else:
+        packages = config.get("packages")
+        package = packages.get(".") if isinstance(packages, dict) else None
+        if not isinstance(package, dict):
+            diagnostics.append("Release Please root package is missing")
+        elif (
+            package.get("release-type") != "go"
+            or package.get("package-name") != "terraform-provider-nutanix"
+            or package.get("changelog-path") != "CHANGELOG.md"
+            or package.get("include-component-in-tag") is not False
+            or package.get("bump-minor-pre-major") is not True
+        ):
+            diagnostics.append("Release Please root package policy differs")
+    return diagnostics
+
+
 def _dependabot_diagnostics(root: Path) -> list[str]:
     path = root / DEPENDABOT_FILE
     if not path.is_file():
@@ -751,6 +949,7 @@ def _dependabot_diagnostics(root: Path) -> list[str]:
 
 def _github_policy_diagnostics(root: Path, arguments: dict[str, str]) -> list[str]:
     diagnostics = _ci_policy_diagnostics(root)
+    diagnostics.extend(_release_policy_diagnostics(root))
     diagnostics.extend(_dependabot_diagnostics(root))
     for relative in (CODEOWNERS_FILE, PULL_REQUEST_TEMPLATE_FILE):
         path = root / relative

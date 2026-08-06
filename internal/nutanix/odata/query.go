@@ -18,7 +18,7 @@ var (
 	ErrInvalidListQuery = errors.New("nutanix list query is invalid")
 )
 
-// ListOptions contains the caller-supplied inputs shared by M2 list operations.
+// ListOptions contains the caller-supplied inputs shared by list operations.
 type ListOptions struct {
 	Page    *int64
 	Limit   *int64

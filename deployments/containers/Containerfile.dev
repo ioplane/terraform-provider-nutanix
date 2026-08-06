@@ -5,6 +5,7 @@ ARG BEADS_VERSION=1.1.2
 ARG TERRAFORM_VERSION=1.15.8
 ARG GOLANGCI_LINT_VERSION=2.12.2
 ARG GORELEASER_VERSION=2.17.1
+ARG SYFT_VERSION=1.50.0
 ARG TFPLUGINDOCS_VERSION=0.25.0
 ARG GOVULNCHECK_VERSION=1.6.0
 ARG GOPLS_VERSION=0.23.0
@@ -114,6 +115,12 @@ RUN set -eux; \
     mkdir "${tmp}/goreleaser"; \
     tar -xzf "${tmp}/${goreleaser_asset}" -C "${tmp}/goreleaser"; \
     install -m 0755 "${tmp}/goreleaser/goreleaser" /usr/local/bin/goreleaser; \
+    syft_asset="syft_${SYFT_VERSION}_linux_${arch}.tar.gz"; \
+    download "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${syft_asset}" "${tmp}/${syft_asset}"; \
+    verify_locked syft "${SYFT_VERSION}" "${arch}" "${syft_asset}"; \
+    mkdir "${tmp}/syft"; \
+    tar -xzf "${tmp}/${syft_asset}" -C "${tmp}/syft"; \
+    install -m 0755 "${tmp}/syft/syft" /usr/local/bin/syft; \
     tfplugindocs_asset="tfplugindocs_${TFPLUGINDOCS_VERSION}_linux_${arch}.zip"; \
     download "https://github.com/hashicorp/terraform-plugin-docs/releases/download/v${TFPLUGINDOCS_VERSION}/${tfplugindocs_asset}" "${tmp}/${tfplugindocs_asset}"; \
     verify_locked tfplugindocs "${TFPLUGINDOCS_VERSION}" "${arch}" "${tfplugindocs_asset}"; \

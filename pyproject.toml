@@ -10,7 +10,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest==9.1.1",
     "ruff==0.16.1",
     "rumdl==0.2.50",
     "ty==0.0.66",
@@ -24,14 +23,10 @@ required-version = "==0.12.1"
 [tool.ruff]
 target-version = "py313"
 line-length = 100
-src = ["scripts", "tests"]
+src = ["scripts"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "UP"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
 
 [tool.ty.environment]
 python-version = "3.13"
@@ -41,7 +36,7 @@ python = "/opt/venv"
 strict-equality-semantics = true
 
 [tool.ty.src]
-include = ["scripts", "tests"]
+include = ["scripts"]
 
 [tool.rumdl]
 disable = ["MD013", "MD076"]
@@ -54,6 +49,4 @@ tables = false
 
 [tool.rumdl.per-file-ignores]
 ".github/pull_request_template.md" = ["MD041"]
-"CLAUDE.md" = ["MD041"]
-"CODEX.md" = ["MD041"]
 "docs/data-sources/*.md" = ["MD012", "MD022", "MD033"]

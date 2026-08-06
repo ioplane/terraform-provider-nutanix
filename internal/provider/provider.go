@@ -60,7 +60,7 @@ func (p *nutanixProvider) Metadata(
 	response.Version = p.version
 }
 
-// Schema returns the M1 provider configuration schema.
+// Schema returns the provider configuration schema.
 func (p *nutanixProvider) Schema(
 	_ context.Context,
 	_ frameworkprovider.SchemaRequest,
@@ -316,12 +316,12 @@ func (d configuredProviderData) SubnetReader() subnet.Reader {
 	return d.subnetClient
 }
 
-// Resources returns the empty M2 managed-resource registry.
+// Resources returns the managed-resource registry.
 func (p *nutanixProvider) Resources(context.Context) []func() resource.Resource {
 	return nil
 }
 
-// DataSources returns the MCP-corroborated M2 read registry.
+// DataSources returns the implemented read-only data-source registry.
 func (p *nutanixProvider) DataSources(context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		cluster.NewDataSource,

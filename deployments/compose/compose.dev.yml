@@ -31,6 +31,8 @@ services:
           command -v task >/dev/null &&
           command -v bd >/dev/null &&
           command -v gopls >/dev/null &&
+          command -v goreleaser >/dev/null &&
+          command -v syft >/dev/null &&
           command -v uv >/dev/null
       interval: 10s
       timeout: 5s

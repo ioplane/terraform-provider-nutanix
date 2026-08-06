@@ -19,7 +19,7 @@ var (
 	ErrInvalidCheck = errors.New("capability check input is invalid")
 )
 
-// Probe is an exact ARC-approved read-only capability operation.
+// Probe is an explicitly registered read-only capability operation.
 // False with nil error means explicitly unsupported; every error is indeterminate.
 type Probe interface {
 	Check(context.Context) (bool, error)

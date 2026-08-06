@@ -1,60 +1,67 @@
 # Product verification standard
 
-## Development sequence
+## Product-first sequence
 
-Implementation is product-first:
+1. Define the API, Terraform, state, identity, and lifecycle contract.
+2. Implement the complete hand-written product corpus.
+3. Use formatting, static analysis, vulnerability scanning, artifact validation, and compilation
+   during implementation.
+4. Add tests for the completed product behavior.
+5. Run authorized acceptance only in the dedicated acceptance phase.
 
-1. implement the main hand-written provider corpus;
-2. use formatting, static analysis, compilation, and artifact validation during
-   implementation;
-3. add tests only after the corresponding Nutanix product implementation is
-   structurally complete;
-4. run product acceptance in the dedicated acceptance phase.
+Repository automation, launchers, documentation, workflow wiring, and policy scripts do not receive
+new test suites. Product tests cover Terraform schema and lifecycle, API mapping, state, import,
+drift, and authorized Nutanix behavior.
 
-Tests cover Terraform schema and lifecycle, API mapping, state, import, and
-authorized Nutanix product behavior. Repository automation, launchers, Beads,
-documentation, roadmap generation, CI wiring, and policy scripts do not receive
-test suites. Existing non-product tests are frozen, excluded from the default
-gate, and removed when their owning tooling is replaced.
+## Evidence hierarchy
 
-Product tests prefer real behavior at the narrowest practical boundary. Local
-servers and deterministic product fixtures are acceptable; mock call
-choreography is not acceptance evidence.
+| Level | Evidence | Purpose |
+| --- | --- | --- |
+| Static | Formatting, lint, vet, vulnerability scan, API lock, docs and build | Implementation safety |
+| Deterministic product | Local HTTP server and product fixtures | Request, response, state, error and redaction behavior |
+| Terraform lifecycle | Protocol 6 and Terraform Plugin Testing | Plan, apply, refresh, import and state behavior |
+| Live product | Authorized isolated Nutanix target | End-to-end compatibility and cleanup |
+
+Mock call choreography is not acceptance evidence. Deterministic servers and fixtures must represent
+documented product behavior and stable error contracts.
 
 ## Execution boundary
 
-All Go, Terraform, Python CLI, build, static-analysis, packaging, and later
-product-test commands run inside Podman through the repository launcher. Host
-toolchains are not completion evidence.
+All Go, Terraform, Python CLI, build, packaging, and product-test commands run inside Podman through
+`./dev`. Host toolchains are not completion evidence.
 
-## Gates
+The default implementation gate is:
 
-The default implementation gate is intentionally small: formatting, static
-analysis, dependency and artifact validation, provider compilation, and
-documentation/tracker consistency. It does not run Python tooling tests, Go
-unit tests, fuzzing, race tests, Protocol acceptance, or package acceptance.
+```bash
+./dev task all
+```
 
-The later product-acceptance gate contains only tests tied to implemented
-Nutanix product behavior. A required product test that does not run cannot be
-reported as passed.
+It intentionally excludes Python tooling tests, Go unit tests, fuzzing, race tests, Protocol
+acceptance, package acceptance, and live acceptance until their owning product phase requires them.
+
+## Live acceptance
+
+Live tests require all of the following:
+
+- an isolated non-production target;
+- explicit authorization for every mutation class;
+- collision-free test identity;
+- bounded execution and retries;
+- deterministic cleanup behavior;
+- evidence for the tested outcome and successful cleanup.
+
+A skipped, unavailable, or partially cleaned live gate is not passed evidence.
 
 ## CI/CD
 
-GitHub Actions is the current pull-request gate and invokes the lightweight
-implementation gate as `./dev task all`. If GitLab jobs are added, they invoke
-only small role-oriented Python CLI modules. Each module has one responsibility,
-explicit inputs, deterministic exit codes, and concise output. CI automation is
-not a general Python framework and has no separate test suite.
-
-## Live acceptance boundary
-
-Live acceptance tests require an approved contract that identifies an
-isolated non-production target, explicit authorization, collision-free test
-identity, bounded execution, and cleanup behavior. Evidence must show both the
-tested outcome and successful cleanup. A skipped or unavailable live gate
-cannot be reported as passed.
+GitHub Actions invokes `./dev task all` for pull requests and `main`. Release artifacts are built
+inside the same Podman boundary after a Release Please PR creates a SemVer tag. If GitLab CI is
+added, jobs invoke small role-oriented Python CLI modules with explicit inputs, deterministic exit
+codes, and concise output.
 
 ## References
 
+- [Provider contract](../contract.md)
+- [Release process](../release-process.md)
 - [Terraform Plugin Framework](https://developer.hashicorp.com/terraform/plugin/framework)
-- [Terraform plugin protocol](https://developer.hashicorp.com/terraform/plugin/terraform-plugin-protocol)
+- [Terraform Plugin Testing](https://developer.hashicorp.com/terraform/plugin/testing)
