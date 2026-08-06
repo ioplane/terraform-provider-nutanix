@@ -13,11 +13,9 @@ import (
 
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/iam"
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/odata"
+	"github.com/ioplane/terraform-provider-nutanix/internal/service/listdata"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/listquery"
-	"github.com/ioplane/terraform-provider-nutanix/internal/service/queryid"
 )
-
-const terraformTypeName = "nutanix_roles_v2"
 
 var roleObjectType = types.ObjectType{AttrTypes: map[string]attr.Type{
 	"ext_id":                        types.StringType,
@@ -45,10 +43,6 @@ type Reader interface {
 
 type providerData interface {
 	RoleReader() Reader
-}
-
-type dataSource struct {
-	reader Reader
 }
 
 type dataSourceModel struct {
@@ -80,30 +74,15 @@ type roleModel struct {
 	IsSystemDefined            types.Bool   `tfsdk:"is_system_defined"`
 }
 
-var (
-	_ datasource.DataSource              = (*dataSource)(nil)
-	_ datasource.DataSourceWithConfigure = (*dataSource)(nil)
-)
-
 // NewDataSource returns a new nutanix_roles_v2 data source.
 func NewDataSource() datasource.DataSource {
-	return &dataSource{}
+	return listdata.New(iamDataSourceDescriptor{}.DataSource())
 }
 
-func (*dataSource) Metadata(
-	_ context.Context,
-	request datasource.MetadataRequest,
-	response *datasource.MetadataResponse,
-) {
-	response.TypeName = request.ProviderTypeName + "_roles_v2"
-}
+type iamDataSourceDescriptor struct{}
 
-func (*dataSource) Schema(
-	_ context.Context,
-	_ datasource.SchemaRequest,
-	response *datasource.SchemaResponse,
-) {
-	response.Schema = schema.Schema{
+func (iamDataSourceDescriptor) Schema() schema.Schema {
+	return schema.Schema{
 		Description: "Lists Nutanix IAM roles through the provisional IAM v4.0 API surface.",
 		Attributes: map[string]schema.Attribute{
 			"page":     listquery.PageAttribute(),
@@ -143,92 +122,48 @@ func (*dataSource) Schema(
 	}
 }
 
-func (d *dataSource) Configure(
-	_ context.Context,
-	request datasource.ConfigureRequest,
-	response *datasource.ConfigureResponse,
-) {
-	if request.ProviderData == nil {
-		return
-	}
-	configured, ok := request.ProviderData.(providerData)
+func iamDataSourceDescriptorReader(value any) (listdata.ListFunc[iam.Role], bool) {
+	configured, ok := value.(providerData)
 	if !ok {
-		response.Diagnostics.AddError(
-			"Unexpected IAM Role Data Source Configure Type",
-			"The provider supplied incompatible data to the IAM role data source.",
-		)
-		return
+		return nil, ok
 	}
-	d.reader = configured.RoleReader()
-	if d.reader == nil {
-		response.Diagnostics.AddError(
-			"Missing IAM Role Reader",
-			"The provider did not configure the IAM role reader.",
-		)
+	reader := configured.RoleReader()
+	if reader == nil {
+		return nil, true
+	}
+	return reader.ListRoles, true
+}
+
+func (iamDataSourceDescriptor) DataSource() listdata.Descriptor[iam.Role, dataSourceModel] {
+	return listdata.Descriptor[iam.Role, dataSourceModel]{
+		TypeName:            "roles_v2",
+		IdentityTypeName:    "nutanix_roles_v2",
+		Schema:              iamDataSourceDescriptor{}.Schema(),
+		Reader:              iamDataSourceDescriptorReader,
+		Query:               queryValues,
+		SetState:            setStateFromRoles,
+		ConfigureTitle:      "Unexpected IAM Role Data Source Configure Type",
+		ConfigureDetail:     "The provider supplied incompatible data to the IAM role data source.",
+		MissingReaderTitle:  "Missing IAM Role Reader",
+		MissingReaderDetail: "The provider did not configure the IAM role reader.",
+		ReadErrorTitle:      "Unable to Read Nutanix IAM Roles",
+		ReadErrorDetail:     "The provider could not read and map the requested Nutanix IAM roles.",
 	}
 }
 
-func (d *dataSource) Read(
+func setStateFromRoles(
 	ctx context.Context,
-	request datasource.ReadRequest,
-	response *datasource.ReadResponse,
-) {
-	if d.reader == nil {
-		response.Diagnostics.AddError(
-			"Missing IAM Role Reader",
-			"The provider did not configure the IAM role reader.",
-		)
-		return
-	}
-	var config dataSourceModel
-	response.Diagnostics.Append(request.Config.Get(ctx, &config)...)
-	if response.Diagnostics.HasError() {
-		return
-	}
-	options, diagnostics := optionsFromModel(config)
-	response.Diagnostics.Append(diagnostics...)
-	if response.Diagnostics.HasError() {
-		return
-	}
-	roles, identity, err := d.reader.ListRoles(ctx, options)
-	if err != nil {
-		addReadError(&response.Diagnostics)
-		return
-	}
-	id, err := queryid.New(terraformTypeName, identity)
-	if err != nil {
-		addReadError(&response.Diagnostics)
-		return
-	}
-	state, diagnostics := stateFromRoles(ctx, config, id, roles)
-	if len(diagnostics) != 0 {
-		addReadError(&response.Diagnostics)
-		return
-	}
-	response.Diagnostics.Append(response.State.Set(ctx, &state)...)
+	config *dataSourceModel,
+	id string,
+	roles []iam.Role,
+) diag.Diagnostics {
+	state, diagnostics := stateFromRoles(ctx, *config, id, roles)
+	*config = state
+	return diagnostics
 }
 
-func optionsFromModel(model dataSourceModel) (odata.ListOptions, diag.Diagnostics) {
-	return listquery.Options(
-		listquery.Values{
-			Page:    model.Page,
-			Limit:   model.Limit,
-			Filter:  model.Filter,
-			OrderBy: model.OrderBy,
-			Select:  model.Select,
-		},
-		listquery.DiagnosticText{
-			Title:  "Invalid Nutanix IAM Role Query",
-			Detail: "The query value must be known and valid before the IAM role request can be constructed.",
-		},
-	)
-}
-
-func addReadError(diagnostics *diag.Diagnostics) {
-	diagnostics.AddError(
-		"Unable to Read Nutanix IAM Roles",
-		"The provider could not read and map the requested Nutanix IAM roles.",
-	)
+func queryValues(model dataSourceModel) listquery.Values {
+	return listquery.Values{Page: model.Page, Limit: model.Limit, Filter: model.Filter, OrderBy: model.OrderBy, Select: model.Select}
 }
 
 func stateFromRoles(
