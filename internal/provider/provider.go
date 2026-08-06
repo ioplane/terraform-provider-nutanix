@@ -14,8 +14,17 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+
 	"github.com/ioplane/terraform-provider-nutanix/internal/auth"
 	"github.com/ioplane/terraform-provider-nutanix/internal/capability"
+	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/clustermgmt"
+	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/networking"
+	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/prism"
+	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/vmm"
+	"github.com/ioplane/terraform-provider-nutanix/internal/service/category"
+	"github.com/ioplane/terraform-provider-nutanix/internal/service/cluster"
+	"github.com/ioplane/terraform-provider-nutanix/internal/service/image"
+	"github.com/ioplane/terraform-provider-nutanix/internal/service/subnet"
 	"github.com/ioplane/terraform-provider-nutanix/internal/transport"
 )
 
@@ -26,8 +35,12 @@ type nutanixProvider struct {
 }
 
 type configuredProviderData struct {
-	client       *transport.Client
-	capabilities *capability.Registry
+	client         *transport.Client
+	capabilities   *capability.Registry
+	clusterClient  *clustermgmt.Client
+	categoryClient *prism.Client
+	imageClient    *vmm.Client
+	subnetClient   *networking.Client
 }
 
 // New returns a factory for the Nutanix provider.
@@ -183,6 +196,22 @@ func composeProviderData(
 	if err != nil {
 		return configuredProviderData{}, mapClientConfigurationError(err)
 	}
+	clusterClient, err := clustermgmt.NewClient(client)
+	if err != nil {
+		return configuredProviderData{}, productClientConfigurationError()
+	}
+	categoryClient, err := prism.NewClient(client)
+	if err != nil {
+		return configuredProviderData{}, productClientConfigurationError()
+	}
+	imageClient, err := vmm.NewClient(client)
+	if err != nil {
+		return configuredProviderData{}, productClientConfigurationError()
+	}
+	subnetClient, err := networking.NewClient(client)
+	if err != nil {
+		return configuredProviderData{}, productClientConfigurationError()
+	}
 	capabilities, err := capability.NewRegistry(nil)
 	if err != nil {
 		return configuredProviderData{}, newConfigurationError(
@@ -191,7 +220,22 @@ func composeProviderData(
 			"capability registry could not be constructed",
 		)
 	}
-	return configuredProviderData{client: client, capabilities: capabilities}, nil
+	return configuredProviderData{
+		client:         client,
+		capabilities:   capabilities,
+		clusterClient:  clusterClient,
+		categoryClient: categoryClient,
+		imageClient:    imageClient,
+		subnetClient:   subnetClient,
+	}, nil
+}
+
+func productClientConfigurationError() *ConfigurationError {
+	return newConfigurationError(
+		"endpoint",
+		ConfigurationErrorEndpoint,
+		"Nutanix product clients could not be constructed",
+	)
 }
 
 func mapClientConfigurationError(err error) *ConfigurationError {
@@ -252,12 +296,37 @@ func addConfigurationDiagnostic(response *frameworkprovider.ConfigureResponse, e
 	)
 }
 
-// Resources returns the empty M1 managed-resource registry.
+// ClusterReader returns the configured Cluster Management read capability.
+func (d configuredProviderData) ClusterReader() cluster.Reader {
+	return d.clusterClient
+}
+
+// CategoryReader returns the configured Prism category read capability.
+func (d configuredProviderData) CategoryReader() category.Reader {
+	return d.categoryClient
+}
+
+// ImageReader returns the configured VMM image read capability.
+func (d configuredProviderData) ImageReader() image.Reader {
+	return d.imageClient
+}
+
+// SubnetReader returns the configured Networking subnet read capability.
+func (d configuredProviderData) SubnetReader() subnet.Reader {
+	return d.subnetClient
+}
+
+// Resources returns the empty M2 managed-resource registry.
 func (p *nutanixProvider) Resources(context.Context) []func() resource.Resource {
 	return nil
 }
 
-// DataSources returns the empty M1 data-source registry.
+// DataSources returns the MCP-corroborated M2 read registry.
 func (p *nutanixProvider) DataSources(context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{
+		cluster.NewDataSource,
+		category.NewDataSource,
+		image.NewDataSource,
+		subnet.NewDataSource,
+	}
 }

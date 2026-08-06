@@ -246,15 +246,15 @@ the only acceptance review for it.
 | --- | --- |
 | M0 Foundation | repository, standards, Beads, Podman environment, automation, CI, empty protocol 6 provider |
 | M1 Kernel | config, TLS/auth, diagnostics, transport, retry, pagination, ETag, task polling, capabilities |
-| M2 Read-only canary | cluster/category/image/subnet/role/operation reads and import canary |
-| M3 Foundation resources | categories, projects, subnets, storage containers/policies, image placement |
+| M2 Read-only product | cluster/category/image/subnet/role/operation data sources |
+| M3 Foundation resources | import/category reconciliation, categories, projects, subnets, storage containers/policies, image placement |
 | M4 Compute and block storage | VM, volume groups and affinity |
 | M5 IAM | directory, users/groups, roles, policies and user keys |
 | M6 Objects compatibility | official create-only Object Store lifecycle |
 | M7 Compatibility release | full current 20-resource/10-data-source downstream surface and state fixtures |
 | M8 Segmented Objects | separate draft plus precheck/deploy actions |
 | M9 Product expansion | supported stable v4 product namespaces |
-| M10 External planes | Foundation, NDB, Self-Service, NC2, NKP, NDK and NAI adapters |
+| M10 External planes | Foundation, Foundation Central, NDB, Self-Service, NC2, NKP, NDK, NAI, Move, Beam, and Flow Security Central adapters; deprecated NKE compatibility boundary |
 
 M0 does not claim downstream compatibility. Real legacy state inventory and
 `UpgradeState` work remain M7 gates.
@@ -410,6 +410,21 @@ Reuse the following patterns, adapted rather than copied blindly:
 - Generated provider docs are checked for drift.
 - Package tests install the exact ZIP/checksum used by consumers.
 
+The immutable source anchors used for that comparison are:
+
+- the predecessor patch line,
+  [`dantte-lp/powerdns-upstream-patches@051c654277ee4cc4e6102b5a392854b4004ad392`](https://github.com/dantte-lp/powerdns-upstream-patches/tree/051c654277ee4cc4e6102b5a392854b4004ad392),
+  including its `Taskfile.yml`, development Containerfile and Compose files,
+  automation scripts, CI workflow, and release shape;
+- the successor implementation cross-check,
+  [`ioplane/terraform-provider-powerdns@9ef6fb0ba8ed4449c839639d1ba659771a812d8d`](https://github.com/ioplane/terraform-provider-powerdns/tree/9ef6fb0ba8ed4449c839639d1ba659771a812d8d),
+  including its controlled launcher, role-oriented automation, containerized
+  gates, package checks, and release workflow.
+
+Both repository identities and commits were read back through the GitHub API
+on 2026-08-06. These anchors record provenance; Nutanix retains its own
+contracts and does not inherit PowerDNS policy wholesale.
+
 Corrections relative to the PowerDNS repository:
 
 - host Task is not required; the launcher enters the pinned container;
@@ -418,6 +433,29 @@ Corrections relative to the PowerDNS repository:
 - no automation target contains unconditional recursive deletion;
 - M0 does not create a fake lab before there is a bounded Nutanix acceptance
   design.
+
+### Current contract reconciliation
+
+The bullets above record the capabilities studied during the original M0
+design. The current repository contract deliberately narrows the active gate
+while the main Nutanix product corpus is being implemented:
+
+- Python automation receives ruff and ty analysis, but no new automation test
+  suite; existing non-product tests are frozen and excluded from delivery;
+- `task verify` is intentionally an exact alias for the lightweight `task all`
+  gate until the corresponding product corpus and product acceptance contract
+  exist;
+- `package:test` remains a separate packaging-shape command and is excluded
+  from the implementation gate until the packaging and release evidence phase;
+- the static pin checker validates the immutable allowlist and reference
+  syntax; successful `./dev up` builds and successful GitHub Actions runs are
+  the runtime evidence that the pinned base image and Actions resolve;
+- release publication is intentionally deferred. `.goreleaser.yml` records the
+  packaging shape, but no release publication workflow is required in the
+  current M2 implementation sprint.
+
+This reconciliation supersedes the older gate-strength statements for current
+work without rewriting the historical design intent.
 
 ## 10. Repository files in M0
 

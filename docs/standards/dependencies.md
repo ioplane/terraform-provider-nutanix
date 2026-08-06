@@ -20,15 +20,15 @@ gate. Pre-v1 modules are isolated behind internal package boundaries.
 | `github.com/hashicorp/terraform-plugin-go` | `v0.31.0` | Narrow `tfprotov6` protocol tests; not business logic |
 | `github.com/hashicorp/terraform-plugin-testing` | `v1.16.0` | Test-only Terraform lifecycle and Protocol 6 acceptance |
 | `github.com/hashicorp/terraform-plugin-framework-validators` | `v0.19.0` | Framework-native provider and attribute validation |
-| `github.com/hashicorp/terraform-plugin-log` | `v0.10.0` | Structured `tflog` integration with Terraform context |
+| `github.com/hashicorp/terraform-plugin-log` | `v0.11.0` | Structured `tflog` integration with Terraform context |
 | `github.com/google/uuid` | `v1.6.0` | RFC-compatible `NTNX-Request-Id` generation |
 | `github.com/google/go-cmp` | `v0.7.0` | Test-only semantic comparisons |
 
-`terraform-plugin-log v0.11.0` is the newest published module version as of
-2026-08-05. M1 deliberately remains on `v0.10.0`, the version selected by
-Framework `v1.19.0`, Plugin Go `v0.31.0`, Plugin Testing `v1.16.0`, and the
-current official Framework scaffolding. A direct upgrade to `v0.11.0` requires
-its own compatibility diff and full-gate evidence.
+The 2026-08-05 dependency audit upgraded `terraform-plugin-log` from `v0.10.0`
+to the current `v0.11.0`. It is a direct runtime dependency of
+`internal/transport`, its release raises the module baseline to Go 1.25, and it
+remains below the provider's Go 1.26 baseline. The audit found no newer release
+for any direct module listed above.
 
 The standard library owns HTTP, TLS, JSON, URLs, contexts, deadlines, errors,
 and deterministic test servers. Use `net/http`, `crypto/tls`, `crypto/x509`,

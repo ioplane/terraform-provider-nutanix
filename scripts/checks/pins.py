@@ -21,7 +21,7 @@ DEPENDABOT_FILE = Path(".github/dependabot.yml")
 CODEOWNERS_FILE = Path(".github/CODEOWNERS")
 PULL_REQUEST_TEMPLATE_FILE = Path(".github/pull_request_template.md")
 EXPECTED_BASE_DIGEST = "sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7"
-EXPECTED_CONTAINERFILE_SHA256 = "c549f446e252fb9b3ad5b928c8a5991831bc585f1bd4eea01d4392b5a39c1081"
+EXPECTED_CONTAINERFILE_SHA256 = "0497d6873997c505a0b599466f9835e38c9be0e37c70ab2420ad37b98797c056"
 EXPECTED_TOOL_ARGUMENTS = {
     "TASK_VERSION": "3.52.0",
     "BEADS_VERSION": "1.1.2",
@@ -30,6 +30,7 @@ EXPECTED_TOOL_ARGUMENTS = {
     "GORELEASER_VERSION": "2.17.1",
     "TFPLUGINDOCS_VERSION": "0.25.0",
     "GOVULNCHECK_VERSION": "1.6.0",
+    "GOPLS_VERSION": "0.23.0",
     "GH_VERSION": "2.97.0",
     "UV_VERSION": "0.12.1",
     "HADOLINT_VERSION": "2.15.1",
@@ -236,7 +237,7 @@ _CI_MARKER = re.compile(r"^\s*#\s*tool-version:\s*([A-Z][A-Z0-9_]*)=(\S+)\s*$", 
 _HOST_DEVELOPMENT_TOOL = re.compile(
     r"(?<![A-Za-z0-9_.-])(?:/[A-Za-z0-9_.-]+)*/?"
     r"(?:go|gofmt|terraform|task|pytest|python|python3|ruff|ty|uv|uvx|"
-    r"golangci-lint|govulncheck|goreleaser|tfplugindocs)(?=\s|$)"
+    r"golangci-lint|govulncheck|gopls|goreleaser|tfplugindocs)(?=\s|$)"
 )
 _RISKY_COMPOSE_KEYS = frozenset({"cap_add", "devices", "security_opt", "sysctls", "volumes_from"})
 _ALLOWED_COMPOSE_SERVICE_KEYS = frozenset(
@@ -285,7 +286,8 @@ _EXPECTED_COMPOSE_DEV_SERVICE: dict[str, object] = {
             (
                 "test -f /run/.containerenv && command -v go >/dev/null && "
                 "command -v terraform >/dev/null && command -v task >/dev/null && "
-                "command -v bd >/dev/null && command -v uv >/dev/null"
+                "command -v bd >/dev/null && command -v gopls >/dev/null && "
+                "command -v uv >/dev/null"
             ),
         ],
         "interval": "10s",

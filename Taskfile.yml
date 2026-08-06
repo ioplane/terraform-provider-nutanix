@@ -46,6 +46,7 @@ tasks:
         value="$(govulncheck -version 2>&1 | sed -nE 's/.*govulncheck@v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
         test -n "${value}"
         printf 'govulncheck=%s\n' "${value}"
+        emit gopls gopls version
         emit gh gh --version
         emit hadolint hadolint --version
 
@@ -163,18 +164,30 @@ tasks:
       - python -m scripts.checks.tool_versions
 
   docs:check:
-    desc: Lint tracked docs, validate internal links, and reject generated drift
+    desc: Lint repository docs, validate internal links, and reject generated drift
     deps: [_container]
     dir: /workspace
     cmds:
       - >-
-        git ls-files -z -- '*.md' '*.markdown' |
+        git ls-files -z --cached --others --exclude-standard -- '*.md' '*.markdown' |
+        sort -zu |
         xargs -0 --no-run-if-empty rumdl check --color never
       - >-
-        git ls-files -z -- '*.yml' '*.yaml' |
+        git ls-files -z --cached --others --exclude-standard -- '*.yml' '*.yaml' |
+        sort -zu |
         xargs -0 --no-run-if-empty yamllint --strict --config-file .yamllint.yml
       - python -m scripts.checks.docs_links
       - SOURCE_DATE_EPOCH=1700000000 python -m scripts.checks.docs
+
+  docs:generate:
+    desc: Generate the tracked offline Terraform Framework reference pages
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - >-
+        python -m scripts.generate.provider_docs
+        --root /workspace
+        --source-date-epoch 1700000000
 
   oci:check:
     desc: Lint the Containerfile and validate the complete Compose model

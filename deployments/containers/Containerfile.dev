@@ -7,6 +7,7 @@ ARG GOLANGCI_LINT_VERSION=2.12.2
 ARG GORELEASER_VERSION=2.17.1
 ARG TFPLUGINDOCS_VERSION=0.25.0
 ARG GOVULNCHECK_VERSION=1.6.0
+ARG GOPLS_VERSION=0.23.0
 ARG GH_VERSION=2.97.0
 ARG UV_VERSION=0.12.1
 ARG HADOLINT_VERSION=2.15.1
@@ -138,6 +139,7 @@ RUN set -eux; \
 
 RUN set -eux; \
     GOBIN=/usr/local/bin go install "golang.org/x/vuln/cmd/govulncheck@v${GOVULNCHECK_VERSION}"; \
+    GOBIN=/usr/local/bin go install "golang.org/x/tools/gopls@v${GOPLS_VERSION}"; \
     go clean -cache -modcache
 
 WORKDIR /workspace

@@ -56,3 +56,4 @@ tables = false
 ".github/pull_request_template.md" = ["MD041"]
 "CLAUDE.md" = ["MD041"]
 "CODEX.md" = ["MD041"]
+"docs/data-sources/*.md" = ["MD012", "MD022", "MD033"]

@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | M0 | Foundation | closed | - |
 | M1 | Kernel | closed | `ntnx-m0` |
-| M2 | Read-only canary | open | `ntnx-m1` |
+| M2 | Read-only product | open | `ntnx-m1` |
 | M3 | Foundation resources | open | `ntnx-m2` |
 | M4 | Compute and block storage | open | `ntnx-m3` |
 | M5 | IAM | open | `ntnx-m4` |
@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m2.1` — Read-only product contracts and API map
+`ntnx-m2.13` — Publish reviewed M2 delivery stack

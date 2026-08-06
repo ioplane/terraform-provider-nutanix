@@ -94,21 +94,52 @@ Use sources in this order:
 2. the selected version's English error reference;
 3. the selected version's Postman collection;
 4. official SDK documentation and examples as comparison evidence only;
-5. an authorized live PE or PC observation only for an explicitly recorded
+5. version-identified artifacts extracted from a shipped AOS or PC image as
+   comparison and availability evidence only;
+6. an authorized live PE or PC observation only for an explicitly recorded
    documentation gap.
 
 Record OpenAPI, error-reference, and Postman discrepancies as contract risks;
 do not resolve them silently. A live observation documents a gap and does not
 rewrite the locked source without review.
 
+The private `ioplane/nutanix-api` knowledge base does not enter this evidence
+precedence. It is a curated discovery and roadmap index only. Its version,
+operation, authentication, SDK, and coverage claims must be independently
+rebound to the selected Portal artifact and exact MCP evidence before use.
+
 Nutanix SDKs are neither runtime dependencies nor code-generation inputs.
 OpenAPI does not generate transport code, DTOs, Terraform schemas, state
 models, or lifecycle logic. Every product implementation task cites the exact
 locked namespace, version, operations, and schemas it uses.
 
+Every implemented operation must also be found in `nutanix-mcp` by its exact
+namespace, version, and path. An extracted operation absent from the Developer
+Portal lock or MCP corpus is a candidate for ingestion and compatibility
+research, not an implementation contract. Extracted placeholder schemas are
+never used to define a Terraform schema or Go DTO.
+
+The [AOS 7.6 reverse-engineering evidence](nutanix-re-evidence.md) records the
+current secondary-source delta without changing the authoritative lock.
+The [provider handoff review](nutanix-handoff-review.md) pins the exact Gist
+revision that supplied additional RE claims and records which claims were
+accepted, rejected, or deferred. A handoff recommendation cannot override the
+source precedence or implementation boundary above.
+The [Nutanix API knowledge-base review](nutanix-api-evidence.md) applies the
+same boundary to its broader product inventory and synthesized endpoint data.
+
+The [M9 and M10 expansion plan](../superpowers/plans/2026-08-06-m9-m10-product-expansion.md)
+assigns every locked GA namespace and the first external planes to explicit
+evidence-gated delivery tasks. Assignment records intended breadth only; it
+does not approve a Terraform surface or waive an exact MCP operation gate.
+
 ## References
 
 - [Nutanix namespace registry](https://developers.nutanix.com/api/v1/namespaces/)
 - [Nutanix Developer Portal](https://developers.nutanix.com/)
+- [AOS 7.6 reverse-engineering evidence](nutanix-re-evidence.md)
+- [Nutanix provider handoff review](nutanix-handoff-review.md)
+- [Nutanix API knowledge-base evidence](nutanix-api-evidence.md)
+- [M9 and M10 product expansion plan](../superpowers/plans/2026-08-06-m9-m10-product-expansion.md)
 - [Approved foundation design](../superpowers/specs/2026-08-04-foundation-design.md)
 - [Provider architecture](../architecture.md)

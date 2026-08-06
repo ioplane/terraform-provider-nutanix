@@ -38,11 +38,13 @@ The later product-acceptance gate contains only tests tied to implemented
 Nutanix product behavior. A required product test that does not run cannot be
 reported as passed.
 
-## GitLab CI/CD
+## CI/CD
 
-GitLab jobs invoke small role-oriented Python CLI modules. Each module has one
-responsibility, explicit inputs, deterministic exit codes, and concise output.
-CI automation is not a general Python framework and has no separate test suite.
+GitHub Actions is the current pull-request gate and invokes the lightweight
+implementation gate as `./dev task all`. If GitLab jobs are added, they invoke
+only small role-oriented Python CLI modules. Each module has one responsibility,
+explicit inputs, deterministic exit codes, and concise output. CI automation is
+not a general Python framework and has no separate test suite.
 
 ## Live acceptance boundary
 

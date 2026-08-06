@@ -10,8 +10,16 @@ This file is the authoritative working contract for this repository.
 
 ## Product contract
 
-- Obtain an approved design and independent ARC approval before implementing any Terraform type. Approval must cover schema, state, remote identity, import behavior, and tests.
+- Obtain an approved design and independent ARC approval before implementing any Terraform type. Approval must cover schema, state, remote identity, import behavior, and the deferred product-test boundary. Approval defines later product evidence; it does not move tests ahead of the main product corpus.
 - Use the official, repository-locked `developers.nutanix.com` artifacts as the primary API evidence.
+- Before implementing each Nutanix operation, query `nutanix-mcp` with its
+  exact operation identifier and versioned path. Record the matching MCP
+  document or chunk, the exact-path result, and whether the condensed MCP
+  artifact indexes the operation identifier. A matching versioned Swagger
+  document must contain the exact path, while the locked OpenAPI must bind the
+  operation identifier to that path. A missing or conflicting MCP path blocks
+  implementation; an unindexed operation identifier is a recorded MCP coverage
+  gap and does not replace the locked OpenAPI binding.
 - Hand-write transport code, DTOs, Terraform schemas, state models, and lifecycle logic.
 - Do not add a Nutanix SDK as a runtime dependency or use OpenAPI code generation.
 - Implement the main product corpus before adding product tests.
@@ -21,6 +29,10 @@ This file is the authoritative working contract for this repository.
   CI wiring, or policy scripts.
 - Existing non-product tests are frozen and excluded from the default delivery
   gate. Do not expand or repeatedly run them while implementing the product.
+- Before writing product code, document the package owner, consumer-side
+  interfaces, call graph, data ownership, null semantics, and error propagation
+  for the affected functions. Reconcile the design with existing code and
+  obtain the required ARC approval before implementation continues.
 
 ## Execution boundary
 
@@ -31,7 +43,10 @@ This file is the authoritative working contract for this repository.
 
 ## CI/CD automation
 
-- GitLab CI/CD automation consists of small role-oriented Python CLI modules.
+- GitHub Actions is the current pull-request gate and invokes repository work
+  only through `./dev`.
+- If GitLab CI/CD wrappers are added, they consist only of small role-oriented
+  Python CLI modules.
 - Each CLI has one responsibility, explicit arguments and environment inputs,
   deterministic exit codes, and concise machine-readable output.
 - Do not build a general Python automation framework or a CI test harness.

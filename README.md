@@ -1,6 +1,6 @@
 # Terraform Provider for Nutanix
 
-> **Development status:** the M0 foundation and M1 hand-written kernel are complete; the M2 read-only Nutanix product corpus is active. Provider configuration, authentication, TLS, origin-bound HTTP, bounded response/error handling, redaction, structured logging, request IDs, fail-closed retry, pagination, guarded ETags, Prism task handling, and the capability registry are implemented. No runtime capability probe, Terraform resource, data source, or action is registered yet. Product tests follow the corresponding product implementation. This repository is not ready for provider use.
+> **Development status:** the M0 foundation and M1 hand-written kernel are complete; the M2 read-only Nutanix product corpus is active. The provider now registers the hand-written `nutanix_clusters_v2`, `nutanix_categories_v2`, `nutanix_images_v2`, and `nutanix_subnet_v2` data sources. IAM role and operation data sources remain fail-closed because the required exact-path IAM evidence is absent from `nutanix-mcp`. Product tests follow completion of the six-type M2 corpus. No Terraform resource or action is registered, and this repository is not ready for provider use.
 
 This project targets a greenfield Terraform provider for the Nutanix Cloud Platform. The M0 foundation establishes a handwritten modular monolith built with Terraform Plugin Framework and intended to use Terraform Plugin Protocol 6. It does not use a Nutanix SDK as a runtime dependency or generate implementation code from OpenAPI.
 
@@ -44,6 +44,10 @@ Compose project name per Git worktree, mounts that worktree at `/workspace`,
 and mounts its Git common directory at `/git-metadata/.git`. Explicit
 `GIT_DIR`, `GIT_COMMON_DIR`, and `GIT_WORK_TREE` values keep Git commands such
 as `git status` functional in linked worktrees.
+
+The toolbox also installs the official `gopls` language server at exact version
+0.23.0. Run the editor's LSP process through `./dev shell`; `./dev task
+versions` reports both Go 1.26.5 and the matching pinned `gopls` version.
 
 Beads is anchored explicitly at `BEADS_DIR=/workspace/.beads`. Every
 `./dev beads` execution receives the anchor directly, and `./dev shell`
@@ -97,6 +101,19 @@ commands 10 minutes. Expiry sends `TERM` to the command process group, then
 `KILL` after 2 seconds; the resulting exit code, stdout, and stderr are
 preserved.
 
+## Implemented read surface
+
+| Terraform data source | Nutanix API | Reference |
+| --- | --- | --- |
+| `nutanix_clusters_v2` | Cluster Management v4.2 | [schema](docs/data-sources/clusters_v2.md) |
+| `nutanix_categories_v2` | Prism v4.3 | [schema](docs/data-sources/categories_v2.md) |
+| `nutanix_images_v2` | VMM v4.2 | [schema](docs/data-sources/images_v2.md) |
+| `nutanix_subnet_v2` | Networking v4.3 | [schema](docs/data-sources/subnet_v2.md) |
+
+These four operations passed the repository's locked Developer Portal and
+exact-path `nutanix-mcp` gate. They are implementation-complete but do not yet
+have the deferred product-behavior evidence required for a release.
+
 ## Project documents
 
 - [Approved foundation design](docs/superpowers/specs/2026-08-04-foundation-design.md)
@@ -106,7 +123,9 @@ preserved.
 - [Go 1.26 engineering standard](docs/standards/go-1.26.md)
 - [Naming standard](docs/standards/naming.md)
 - [Nutanix artifact standard](docs/standards/nutanix-artifacts.md)
+- [Nutanix API knowledge-base evidence](docs/standards/nutanix-api-evidence.md)
 - [Testing standard](docs/standards/testing.md)
+- [Foundation delivery audit](docs/standards/foundation-delivery-audit.md)
 - [Go dependency policy](docs/standards/dependencies.md)
 - [ADR 0001: Modular Monolith](docs/adr/0001-modular-monolith.md)
 - [ADR 0002: Hand-Written Nutanix Client](docs/adr/0002-hand-written-nutanix-client.md)

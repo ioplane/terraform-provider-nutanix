@@ -70,6 +70,12 @@ Exactly one complete authentication mode is required after resolution:
 - partial Basic credentials, both complete modes, or no complete mode are
   configuration errors.
 
+Bearer/OIDC, service-token, certificate-header, browser-cookie, and arbitrary
+custom-header modes are outside the current public contract. Secondary RE
+evidence does not add provider attributes or credential flows. A new mode
+requires an authoritative Nutanix security scheme, exact MCP corroboration,
+secret-lifecycle and threat review, and a separate ARC-approved contract.
+
 Basic usernames may not contain `:`. API keys contain 1 through 4096 visible
 ASCII bytes (`0x21` through `0x7e`); control characters, whitespace, non-ASCII
 bytes, and invalid HTTP header values are rejected without reproducing the
@@ -142,6 +148,43 @@ operation name, HTTP method, path template, attempt, status, duration, and
 request correlation identifier. Raw URLs, queries, headers, bodies,
 credentials, object names, and remote identifiers are excluded.
 
+## M2 read-only product contract
+
+The provider currently registers exactly four MCP-corroborated read types:
+
+| Terraform data source | Operation | Locked wire path |
+| --- | --- | --- |
+| `nutanix_clusters_v2` | `listClusters` | `GET /api/clustermgmt/v4.2/config/clusters` |
+| `nutanix_categories_v2` | `listCategories` | `GET /api/prism/v4.3/config/categories` |
+| `nutanix_images_v2` | `listImages` | `GET /api/vmm/v4.2/content/images` |
+| `nutanix_subnet_v2` | `getSubnetById` | `GET /api/networking/v4.3/config/subnets/{extId}` |
+
+An AOS 7.6 shipped-client extraction exposes a newer VMM v4.3 surface, but the
+Developer Portal GA registry and `nutanix-mcp` currently stop at VMM v4.2. The
+provider therefore keeps the authoritative v4.2 image contract and tracks the
+v4.3 qualification separately in
+[the reverse-engineering evidence standard](standards/nutanix-re-evidence.md).
+
+The three list types expose only the operation's reviewed OData inputs. Their
+state ID is lowercase SHA-256 over the Terraform type and normalized
+caller-only query identity; mandatory namespace projections and server
+defaults do not alter it. The subnet requires a canonical UUID `ext_id`,
+preserves the caller's valid spelling as both `ext_id` and `id`, and rejects a
+response with a semantically different UUID.
+
+Namespace DTO pointers preserve JSON null. Missing or null collections become
+typed Terraform null lists, explicit empty JSON arrays remain empty lists, and
+state is written only after the complete response has decoded and passed
+identity validation. The public schemas are generated from the Framework
+implementation under [`docs/data-sources`](data-sources).
+
+`nutanix_roles_v2` and `nutanix_operations_v2` are approved target contracts
+but are not registered or implemented. The 2026-08-05 MCP corpus has no IAM v4
+API artifact or either exact versioned path, so their implementation remains
+blocked until the operation-by-operation gate succeeds. The full API, schema,
+identity, null, diagnostic, and deferred-test boundary is the
+[approved M2 contract](superpowers/specs/2026-08-05-m2-read-only-product-contract.md).
+
 ## Design gate
 
 Before implementation begins, every Terraform type requires an approved ARC
@@ -151,11 +194,26 @@ contract. For resources and data sources, that contract covers:
 2. state model and lifecycle semantics;
 3. remote identity and `ext_id` mapping;
 4. import grammar and state-upgrade obligations;
-5. positive, negative, drift, and compatibility tests.
+5. the positive, negative, drift, and compatibility evidence that will be added
+   during the later product-test phase.
 
 The contract names the exact locked Nutanix namespace, version, operations,
 and schemas used as evidence. Implementation remains hand-written and follows
 the dependency boundaries in [the provider architecture](architecture.md).
+Approval of the evidence boundary is required before implementation, but the
+tests themselves are written only after the corresponding main product corpus
+exists.
+
+Each operation also requires a `nutanix-mcp` query containing its exact
+operation ID and versioned path. The contract records the matching document or
+chunk, exact-path result, operation-ID indexing result, and query date. The
+repository-locked Developer Portal artifact remains the wire authority and
+must bind that operation ID to the MCP-matched path. A missing or conflicting
+MCP path is a fail-closed implementation blocker; an operation ID omitted from
+a condensed MCP Swagger artifact is recorded as a corpus coverage gap. A
+design review for the type must trace every function boundary from Framework
+`Read` through the namespace request and back to `State.Set`, including
+ownership of inputs, DTOs, nulls, errors, and diagnostics.
 
 ## M0 boundary
 
@@ -163,7 +221,9 @@ M0 registers zero resources, data sources, actions, functions, and ephemeral
 resources. It proves only the empty provider foundation and protocol 6 delivery
 controls. M1 replaces the empty provider schema with the configuration contract
 above but still registers zero product resources, data sources, actions,
-functions, and ephemeral resources.
+functions, and ephemeral resources. The current M2 increment registers the four
+read-only data sources listed above and still registers zero resources, actions,
+functions, or ephemeral resources.
 
 Legacy state inventory, state migration, and full downstream compatibility are
 M7 gates, not M0 completion claims.

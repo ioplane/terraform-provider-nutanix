@@ -26,6 +26,7 @@ EXPECTED_VERSIONS = {
     "goreleaser": "2.17.1",
     "tfplugindocs": "0.25.0",
     "govulncheck": "1.6.0",
+    "gopls": "0.23.0",
     "gh": "2.97.0",
     "hadolint": "2.15.1",
 }
