@@ -15,7 +15,7 @@ document is an evidence projection, not a second task list.
 | Use Terraform Plugin Framework with protocol 6 | Proved | [`go.mod`](../../go.mod) pins current releases [Framework 1.19.0](https://github.com/hashicorp/terraform-plugin-framework/releases/tag/v1.19.0) and [plugin-go 0.31.0](https://github.com/hashicorp/terraform-plugin-go/releases/tag/v0.31.0). The [entrypoint](../../cmd/terraform-provider-nutanix/main.go) passes the registry address, debug mode, and explicit `ProtocolVersion: 6` to `providerserver.Serve`; the [pinned Framework source](https://github.com/hashicorp/terraform-plugin-framework/blob/v1.19.0/providerserver/serve_opts.go) defines protocol 6 as the default and supported selection. |
 | Run development through Podman | Proved | The [toolbox](../../deployments/containers/Containerfile.dev) uses digest-pinned `golang:1.26-trixie`; [`pyproject.toml`](../../pyproject.toml) pins podman-py 5.8.0 and podman-compose 1.6.0; the [Compose service](../../deployments/compose/compose.dev.yml) has no Podman socket; and [`Taskfile.yml`](../../Taskfile.yml) enforces the container guard. |
 | Verify local and stacked delivery state | Proved | Full `./dev task all` receipts are recorded in closed Beads tasks `ntnx-m2.12` and `ntnx-m2.14`; the latter includes the final Nutanix API reconciliation and independent reviews. The [M0 and M1 check receipts](#github-api-receipts) bind successful `Foundation` jobs to exact sprint-head commits, while the protection receipt binds the required strict check and review controls. |
-| Publish the complete provider foundation to `main` | Incomplete; authorization required | The [stacked PR receipts](#github-api-receipts) show `main` at bootstrap commit `3fb8b05340cda7c6db92d75e9ad878284475eeb1`, M0 and M1 in draft PRs, and no remote M2 ref. The local M2 branch remains an unpublished 52-path working set. |
+| Publish the complete provider foundation to `main` | Stack published; review and merge remain | The [stacked PR receipts](#github-api-receipts) show `main` at bootstrap commit `3fb8b05340cda7c6db92d75e9ad878284475eeb1` and M0, M1, and M2 in draft PRs with successful `Foundation` checks. Merge still requires protected review and separate authorization. |
 | Publish a release | Deferred by contract | The [foundation design](../superpowers/specs/2026-08-04-foundation-design.md#13-security-boundaries) records packaging shape only; product evidence, package acceptance, and release publication belong to a later approved phase. |
 
 ## GitHub API receipts
@@ -31,16 +31,23 @@ The following read-only receipts were refreshed with `gh api` on 2026-08-06:
 - [Draft PR 2](https://github.com/ioplane/terraform-provider-nutanix/pull/2)
   binds that M0 head to
   `sprint/m1-kernel@9d06e3115108786cb4f56cb0bf86a95eb5b66094`.
+- [Draft PR 3](https://github.com/ioplane/terraform-provider-nutanix/pull/3)
+  binds that M1 head to M2 product commit
+  `2e8b7af4a98028913741516d9342dc6de1c5b54b` on
+  `sprint/m2-readonly`.
 - M0 [Foundation job 92230155795](https://github.com/ioplane/terraform-provider-nutanix/actions/runs/30982623053/job/92230155795)
   completed successfully for `5ffdfd66c7c28fdfa48551839be763332e6130d4`;
   M1 [Foundation job 92385923310](https://github.com/ioplane/terraform-provider-nutanix/actions/runs/31029390351/job/92385923310)
-  completed successfully for `9d06e3115108786cb4f56cb0bf86a95eb5b66094`.
+  completed successfully for `9d06e3115108786cb4f56cb0bf86a95eb5b66094`;
+  M2 [Foundation job 92489596957](https://github.com/ioplane/terraform-provider-nutanix/actions/runs/31061285455/job/92489596957)
+  completed successfully for `2e8b7af4a98028913741516d9342dc6de1c5b54b`.
 - [`GET /branches/main/protection`](https://api.github.com/repos/ioplane/terraform-provider-nutanix/branches/main/protection)
   returned strict required check `Foundation`, one required code-owner review,
   stale-review dismissal, administrator enforcement, and required conversation
   resolution.
-- `git ls-remote origin` returned no `refs/heads/sprint/m2-readonly`; the exact
-  remote refs are recorded in the [M2 delivery manifest](m2-delivery-manifest.md).
+- `origin/sprint/m2-readonly` and draft PR 3 now provide the remote M2
+  delivery receipt recorded in the [M2 delivery
+  manifest](m2-delivery-manifest.md).
 
 ## Automation provenance
 
@@ -73,12 +80,19 @@ podman-py 5.8.0, and podman-compose 1.6.0. All completion evidence is produced
 inside that toolbox through `./dev`; the host is limited to Git, GitHub, Podman
 control-plane, and pinned uv bootstrap operations.
 
+The vendor checkout was preserved under the `terraform-provider-nutanix-upstream`
+name, while the standalone ioplane checkout was promoted to the canonical
+`terraform-provider-nutanix` name. Git repaired every linked worktree in both
+directions, and the healthy replacement development container binds the
+canonical common Git directory.
+
 No product test, package test, live PE/PC product API call, or live-system
 mutation is authorized by this audit. Read-only Developer Portal artifact and
-MCP evidence calls are part of the documented verification gate. No staging,
-commit, push, pull-request mutation, merge, or release publication is
-authorized. The exact unpublished M2 boundary is defined by the
-[M2 atomic delivery manifest](m2-delivery-manifest.md).
+MCP evidence calls are part of the documented verification gate. The user
+authorized and the project completed the M2 commit, push, and draft pull
+request. Merge and release publication remain unauthorized. The exact M2
+delivery is defined by the [M2 atomic delivery
+manifest](m2-delivery-manifest.md).
 
 ## MCP evidence boundary
 

@@ -6,26 +6,28 @@ Git worktrees and read-only GitHub API responses.
 
 ## Branch lineage
 
-| Milestone | Local branch | HEAD | Remote delivery state |
+| Milestone | Local branch | Delivery anchor | Remote delivery state |
 | --- | --- | --- | --- |
 | M0 | `sprint/m0-foundation` | `5ffdfd66c7c28fdfa48551839be763332e6130d4` | Draft PR 1 targets `main` at `3fb8b05340cda7c6db92d75e9ad878284475eeb1` |
 | M1 | `sprint/m1-kernel` | `9d06e3115108786cb4f56cb0bf86a95eb5b66094` | Draft PR 2 targets `sprint/m0-foundation` at `5ffdfd66c7c28fdfa48551839be763332e6130d4` |
-| M2 | `sprint/m2-readonly` | `9d06e3115108786cb4f56cb0bf86a95eb5b66094` plus the working set below | No GitHub branch or pull request |
+| M2 | `sprint/m2-readonly` | Product commit `2e8b7af4a98028913741516d9342dc6de1c5b54b` | Draft PR 3 targets `sprint/m1-kernel` at `9d06e3115108786cb4f56cb0bf86a95eb5b66094` |
 
-The M0 and M1 worktrees are clean. Git ancestry proves `main -> M0 -> M1`.
-The M2 branch still points exactly at M1, so every dirty path below belongs to
-the unpublished M2 working set; none is a committed M0 or M1 delta.
+The M0, M1, and M2 worktrees were clean after the canonical checkout
+relocation. Git ancestry proves `main -> M0 -> M1 -> M2`. Product commit
+`2e8b7af4a98028913741516d9342dc6de1c5b54b` has the exact M1 commit as its
+parent and contains the reviewed product manifest below.
 
-## Index risk
+## Delivered manifest
 
-The snapshot contains 52 unique dirty paths: 25 tracked paths and 27
-untracked paths. Only eight paths are currently represented in the index;
-all eight also have newer working-tree changes. The index is therefore
-not a valid delivery manifest and must not be committed as-is.
+The reviewed snapshot contained 52 unique dirty paths: 25 tracked paths and 27
+untracked paths. Before commit, the sorted manifest matched the complete Git
+status set and the index exactly, with no unstaged path. `git diff --cached
+--check` and `./dev task all` both passed on that final index.
 
-The following groups are exhaustive. A future M2 branch publication must
-contain all four groups. Groups may be separate reviewed commits in the order
-shown, but the pull request is the atomic delivery boundary.
+The following groups are exhaustive for product commit
+`2e8b7af4a98028913741516d9342dc6de1c5b54b`. The receipt-only follow-up is
+restricted to group A projections and does not change the product surface.
+The pull request remains the atomic delivery boundary.
 
 ## A. Governance, contract, and evidence
 
@@ -103,14 +105,27 @@ group C provider surface and delivered with the same pull request.
 - `docs/data-sources/images_v2.md`
 - `docs/data-sources/subnet_v2.md`
 
-## Publication boundary
+## Publication receipt
 
-No staging, commit, push, or pull-request mutation is authorized by this
-manifest. Before publication, the complete 52-path set must be reviewed as a
-unit, regenerated where applicable, and pass `./dev task all`. Publication
-then requires an explicit commit approval, creation of
-`origin/sprint/m2-readonly` from the verified local branch, and a draft pull
-request targeting `sprint/m1-kernel` at the exact SHA recorded above.
+The user explicitly authorized commit, push, GitHub pull request, and an MR
+where a real target exists. The reviewed set was committed as
+`2e8b7af4a98028913741516d9342dc6de1c5b54b`, pushed to
+`origin/sprint/m2-readonly`, and published as [draft PR
+3](https://github.com/ioplane/terraform-provider-nutanix/pull/3). Its base is
+the exact M1 SHA recorded above. [Foundation job
+92489596957](https://github.com/ioplane/terraform-provider-nutanix/actions/runs/31061285455/job/92489596957)
+completed successfully for that product commit.
+
+The standalone `ioplane/terraform-provider-nutanix` checkout now owns the
+canonical local repository name. The preserved Nutanix checkout is named
+`terraform-provider-nutanix-upstream`, including its pre-existing untracked
+`.serena/` data. `git worktree repair` restored all M0, M1, and M2
+administrative links, and the recreated healthy development container binds
+the canonical Git metadata path.
+
+GitLab inventory found no exact project for this provider. No unrelated
+project or new GitLab namespace was used to manufacture an MR receipt. No
+merge or release publication is authorized by this delivery.
 
 IAM roles and operations remain outside this delivery set until their exact
 method/path and operation-ID evidence passes the live `nutanix-mcp` gate.

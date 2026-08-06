@@ -171,6 +171,11 @@ vulnerability scanner, documentation checks, and `go build` through the
 lightweight container gate. These checks prove that the product corpus builds
 and meets static policy; they are not presented as product behavioral proof.
 
-The unpublished working set and its atomic GitHub delivery boundary are
-projected in `docs/standards/m2-delivery-manifest.md`; Beads task
-`ntnx-m2.11` remains canonical for that reconciliation.
+The four implemented data sources were delivered in product commit
+`2e8b7af4a98028913741516d9342dc6de1c5b54b` and published as stacked draft PR
+3 after `./dev task all` and GitHub `Foundation` both passed. The exact atomic
+delivery and local canonical-checkout relocation are projected in
+`docs/standards/m2-delivery-manifest.md`. Beads task `ntnx-m2.13` records the
+completed publication, while `ntnx-m2.15` owns review and any separately
+authorized stack landing. IAM role and operation work remains fail-closed on
+the exact `nutanix-mcp` corpus gate.

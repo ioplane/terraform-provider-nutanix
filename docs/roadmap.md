@@ -18,4 +18,4 @@
 
 ## Current critical task
 
-`ntnx-m2.13` — Publish reviewed M2 delivery stack
+`ntnx-m2.15` — Review and land stacked M0-M2 delivery
