@@ -74,6 +74,33 @@ not committed and the provider never downloads registry artifacts at runtime.
 OpenAPI, error-reference, and Postman conflicts are recorded and fail closed. Secondary or live
 evidence cannot silently replace the selected Developer Portal contract.
 
+## Secondary discovery index
+
+`ioplane/nutanix-api@d68ea9bd88d5b6a630c4ad04041bed7f97978c62` is the pinned breadth and
+discrepancy index. It contributes product identities, candidate operations, version signals, and
+provenance pointers. It is not a wire-contract source, and every claim inherits the evidence rank
+of the underlying Portal, SDK, provider, shipped-product, or reverse-engineering source.
+
+The pinned machine index contains 31 API families, 2,516 raw rows, and 2,166 distinct JSON records.
+Independent validation found 1,435 non-null path fields and 1,081 null paths. A non-null field does
+not establish an operation-exact route: the 372 Prism v2 rows reduce to 71 method and path pairs,
+and the 350-row Flow Security Central and NAI inventories are byte-identical. Human summaries in
+the same snapshot still report 2,521 total operations, 925 v4 operations, and 1,477 concrete paths;
+those values conflict with the machine records and are rejected.
+
+Secondary evidence is accepted only when all applicable integrity checks pass:
+
+1. immutable repository and commit provenance;
+2. machine-readable row, method, path, operation, and source validation;
+3. agreement between generated indexes, namespace metadata, and underlying records;
+4. agreement with the selected Developer Portal namespace and version;
+5. exact-operation corroboration before implementation.
+
+A missing path, missing schema, conflicting total, ambiguous product version, or unavailable
+corroboration channel blocks promotion. A REST path is never inferred from a gRPC service or method
+name. Extracted protobuf and binary symbols may establish product availability or RPC topology but
+do not define HTTP routing, authentication, payloads, errors, lifecycle, or Terraform state.
+
 Nutanix SDKs are not runtime dependencies or code-generation inputs. OpenAPI does not generate
 transport code, DTOs, Terraform schemas, state models, or lifecycle logic.
 
