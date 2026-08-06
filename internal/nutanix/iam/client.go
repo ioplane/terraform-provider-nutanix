@@ -86,36 +86,15 @@ func (c *Client) ListOperations(
 	ctx context.Context,
 	options odata.ListOptions,
 ) ([]Operation, url.Values, error) {
-	if c == nil || c.executor == nil {
-		return nil, nil, ErrMissingClient
-	}
-	query, err := odata.Build(options, listOperationsPolicy)
-	if err != nil {
-		return nil, nil, fmt.Errorf("build listOperations query: %w", err)
-	}
-	request, err := transport.NewRequest(transport.RequestOptions{
-		Operation:        "listOperations",
-		Method:           http.MethodGet,
-		PathTemplate:     listOperationsPath,
-		Query:            query.Values(),
-		ExpectedStatuses: []int{http.StatusOK},
-		RetryClass:       transport.RetryRead,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("build listOperations request: %w", err)
-	}
-	response, err := c.executor.Execute(ctx, request)
-	if err != nil {
-		return nil, nil, fmt.Errorf("execute listOperations: %w", err)
-	}
-	operations, err := apiresponse.DecodeList[Operation](response.Body())
-	if err != nil {
-		return nil, nil, fmt.Errorf("decode listOperations response: %w", err)
-	}
-	if err := validateOperations(operations); err != nil {
-		return nil, nil, err
-	}
-	return operations, query.IdentityValues(), nil
+	return list[Operation](
+		ctx,
+		c,
+		options,
+		"listOperations",
+		listOperationsPath,
+		listOperationsPolicy,
+		validateOperations,
+	)
 }
 
 // ListRoles returns validated IAM roles and the caller-only query identity.
@@ -123,36 +102,56 @@ func (c *Client) ListRoles(
 	ctx context.Context,
 	options odata.ListOptions,
 ) ([]Role, url.Values, error) {
-	if c == nil || c.executor == nil {
+	return list[Role](
+		ctx,
+		c,
+		options,
+		"listRoles",
+		listRolesPath,
+		listRolesPolicy,
+		validateRoles,
+	)
+}
+
+func list[T any](
+	ctx context.Context,
+	client *Client,
+	options odata.ListOptions,
+	operation string,
+	path string,
+	policy odata.Policy,
+	validate func([]T) error,
+) ([]T, url.Values, error) {
+	if client == nil || client.executor == nil {
 		return nil, nil, ErrMissingClient
 	}
-	query, err := odata.Build(options, listRolesPolicy)
+	query, err := odata.Build(options, policy)
 	if err != nil {
-		return nil, nil, fmt.Errorf("build listRoles query: %w", err)
+		return nil, nil, fmt.Errorf("build %s query: %w", operation, err)
 	}
 	request, err := transport.NewRequest(transport.RequestOptions{
-		Operation:        "listRoles",
+		Operation:        operation,
 		Method:           http.MethodGet,
-		PathTemplate:     listRolesPath,
+		PathTemplate:     path,
 		Query:            query.Values(),
 		ExpectedStatuses: []int{http.StatusOK},
 		RetryClass:       transport.RetryRead,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("build listRoles request: %w", err)
+		return nil, nil, fmt.Errorf("build %s request: %w", operation, err)
 	}
-	response, err := c.executor.Execute(ctx, request)
+	response, err := client.executor.Execute(ctx, request)
 	if err != nil {
-		return nil, nil, fmt.Errorf("execute listRoles: %w", err)
+		return nil, nil, fmt.Errorf("execute %s: %w", operation, err)
 	}
-	roles, err := apiresponse.DecodeList[Role](response.Body())
+	entities, err := apiresponse.DecodeList[T](response.Body())
 	if err != nil {
-		return nil, nil, fmt.Errorf("decode listRoles response: %w", err)
+		return nil, nil, fmt.Errorf("decode %s response: %w", operation, err)
 	}
-	if err := validateRoles(roles); err != nil {
+	if err := validate(entities); err != nil {
 		return nil, nil, err
 	}
-	return roles, query.IdentityValues(), nil
+	return entities, query.IdentityValues(), nil
 }
 
 func validateOperations(operations []Operation) error {
