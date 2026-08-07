@@ -577,8 +577,11 @@ def _ci_policy_diagnostics(root: Path) -> list[str]:
         "workflow_dispatch",
     }:
         diagnostics.append("CI triggers must include push, pull_request, and workflow_dispatch")
-    elif not isinstance(triggers.get("push"), dict) or triggers["push"].get("branches") != ["main"]:
-        diagnostics.append("CI push trigger must select main")
+    elif not isinstance(triggers.get("push"), dict) or triggers["push"].get("branches") != [
+        "dev",
+        "main",
+    ]:
+        diagnostics.append("CI push trigger must select dev and main")
     if document.get("permissions") != {"contents": "read"}:
         diagnostics.append("CI permissions must be exactly contents read")
     concurrency = document.get("concurrency")
