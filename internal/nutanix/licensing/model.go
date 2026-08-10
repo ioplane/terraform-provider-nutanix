@@ -1,6 +1,8 @@
 // Package licensing implements hand-written Licensing API operations.
 package licensing
 
+import "encoding/json"
+
 // License is the reviewed Licensing v4.3 applied-license projection.
 //
 // The API exposes additional fields and relationships. This model deliberately
@@ -63,11 +65,11 @@ type LicenseKeyAssociation struct {
 // Feature is the reviewed Licensing v4.3 feature inventory projection.
 // Value is either a boolean or an integer according to the API contract.
 type Feature struct {
-	Name               *string `json:"name"`
-	ValueType          *string `json:"valueType"`
-	Value              any     `json:"value"`
-	LicenseType        *string `json:"licenseType"`
-	LicenseCategory    *string `json:"licenseCategory"`
-	LicenseSubCategory *string `json:"licenseSubCategory"`
-	Scope              *string `json:"scope"`
+	Name               *string         `json:"name"`
+	ValueType          *string         `json:"valueType"`
+	Value              json.RawMessage `json:"value"`
+	LicenseType        *string         `json:"licenseType"`
+	LicenseCategory    *string         `json:"licenseCategory"`
+	LicenseSubCategory *string         `json:"licenseSubCategory"`
+	Scope              *string         `json:"scope"`
 }
