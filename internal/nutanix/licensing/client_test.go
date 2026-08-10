@@ -191,11 +191,11 @@ func TestListFeaturesUsesLockedOperationAndQuery(t *testing.T) {
 	if len(features) != 2 || features[0].Name == nil || *features[0].Name != "dp_recovery" {
 		t.Fatalf("features = %#v, want two features beginning with dp_recovery", features)
 	}
-	if value, ok := features[0].Value.(bool); !ok || !value {
-		t.Fatalf("boolean feature value = %#v, want true", features[0].Value)
+	if got := string(features[0].Value); got != "true" {
+		t.Fatalf("boolean feature value = %q, want true", got)
 	}
-	if value, ok := features[1].Value.(float64); !ok || value != 36 {
-		t.Fatalf("integer feature value = %#v, want 36", features[1].Value)
+	if got := string(features[1].Value); got != "36" {
+		t.Fatalf("integer feature value = %q, want 36", got)
 	}
 	if got := identity.Get("$select"); got != "description" {
 		t.Fatalf("caller identity select = %q, want description", got)
