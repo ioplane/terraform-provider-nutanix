@@ -2,6 +2,7 @@ package licensefeature
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -14,7 +15,7 @@ func TestStateFromFeaturesNormalizesUnionValue(t *testing.T) {
 	features := []licensing.Feature{{
 		Name:        &name,
 		ValueType:   &valueType,
-		Value:       true,
+		Value:       json.RawMessage("true"),
 		LicenseType: &licenseType,
 	}}
 
@@ -31,7 +32,17 @@ func TestStateFromFeaturesNormalizesUnionValue(t *testing.T) {
 }
 
 func TestFeatureValueRejectsUnsupportedType(t *testing.T) {
-	if _, err := featureValue("unexpected"); err == nil {
+	if _, err := featureValue(json.RawMessage(`"unexpected"`)); err == nil {
 		t.Fatal("featureValue() error = nil, want unsupported type error")
+	}
+}
+
+func TestFeatureValuePreservesLargeInteger(t *testing.T) {
+	value, err := featureValue(json.RawMessage("9007199254740993"))
+	if err != nil {
+		t.Fatalf("featureValue() error = %v", err)
+	}
+	if got := value.ValueString(); got != "9007199254740993" {
+		t.Fatalf("featureValue() = %q, want exact integer", got)
 	}
 }
