@@ -2,10 +2,12 @@
 package licensefeature
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
-	"strconv"
+	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -152,15 +154,15 @@ func stateFromFeatures(ctx context.Context, config dataSourceModel, id string, f
 	return config, diagnostics
 }
 
-func featureValue(value any) (types.String, error) {
-	switch value := value.(type) {
-	case nil:
+var integerValuePattern = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
+
+func featureValue(value json.RawMessage) (types.String, error) {
+	value = bytes.TrimSpace(value)
+	if len(value) == 0 || bytes.Equal(value, []byte("null")) {
 		return types.StringNull(), nil
-	case bool:
-		return types.StringValue(strconv.FormatBool(value)), nil
-	case float64:
-		return types.StringValue(strconv.FormatFloat(value, 'f', -1, 64)), nil
-	default:
-		return types.StringNull(), fmt.Errorf("unsupported license feature value type %T", value)
 	}
+	if bytes.Equal(value, []byte("true")) || bytes.Equal(value, []byte("false")) || integerValuePattern.Match(value) {
+		return types.StringValue(string(value)), nil
+	}
+	return types.StringNull(), fmt.Errorf("unsupported license feature value")
 }
