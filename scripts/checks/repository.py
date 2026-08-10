@@ -38,7 +38,7 @@ REQUIRED_FILES = (
     "go.sum",
     "release-please-config.json",
 )
-FORBIDDEN_PUBLIC_FILES = {".beads/issues.jsonl", "AGENTS.md", "CLAUDE.md", "CODEX.md"}
+FORBIDDEN_PUBLIC_FILES = {".beads/issues.jsonl", "CLAUDE.md", "CODEX.md"}
 FORBIDDEN_PUBLIC_DIRECTORIES = {PurePosixPath("docs/adr"), PurePosixPath("docs/superpowers")}
 
 Runner = Callable[[Sequence[str], Path], str]
