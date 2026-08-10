@@ -127,3 +127,77 @@ func TestListLicenseKeysRejectsInvalidIdentity(t *testing.T) {
 		t.Fatal("invalid remote identity leaked into the error")
 	}
 }
+
+func TestListFeaturesUsesLockedOperationAndQuery(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			t.Errorf("method = %q, want GET", request.Method)
+		}
+		if request.URL.Path != listFeaturesPath {
+			t.Errorf("path = %q, want %q", request.URL.Path, listFeaturesPath)
+		}
+		query := request.URL.Query()
+		for name, want := range map[string]string{
+			"$page":    "1",
+			"$limit":   "20",
+			"$filter":  "name eq 'dp_recovery'",
+			"$orderby": "name",
+			"$select":  "description,licenseCategory,licenseSubCategory,licenseType,name,scope,value,valueType",
+		} {
+			if got := query.Get(name); got != want {
+				t.Errorf("query %s = %q, want %q", name, got, want)
+			}
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"data":[{"name":"dp_recovery","valueType":"BOOLEAN","value":true,"licenseType":"PRISM","licenseCategory":"STARTER","licenseSubCategory":"ADDON","scope":"PC"},{"name":"vm_count","valueType":"INTEGER","value":36}]}`))
+	}))
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen() error = %v", err)
+	}
+	server.Listener = listener
+	server.StartTLS()
+	t.Cleanup(server.Close)
+
+	origin, err := transport.ParseOrigin(server.URL)
+	if err != nil {
+		t.Fatalf("ParseOrigin() error = %v", err)
+	}
+	tlsConfig, err := transport.NewTLSConfig(origin, true, "")
+	if err != nil {
+		t.Fatalf("NewTLSConfig() error = %v", err)
+	}
+	transportClient, err := transport.NewClient(origin, auth.NewAPIKey("test-api-key"), tlsConfig, time.Second, "test", "test")
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	client, err := NewClient(transportClient)
+	if err != nil {
+		t.Fatalf("licensing.NewClient() error = %v", err)
+	}
+
+	page, limit := int64(1), int64(20)
+	filter, orderBy, selectValue := "name eq 'dp_recovery'", "name", "description"
+	features, identity, err := client.ListFeatures(context.Background(), odata.ListOptions{
+		Page:    &page,
+		Limit:   &limit,
+		Filter:  &filter,
+		OrderBy: &orderBy,
+		Select:  &selectValue,
+	})
+	if err != nil {
+		t.Fatalf("ListFeatures() error = %v", err)
+	}
+	if len(features) != 2 || features[0].Name == nil || *features[0].Name != "dp_recovery" {
+		t.Fatalf("features = %#v, want two features beginning with dp_recovery", features)
+	}
+	if value, ok := features[0].Value.(bool); !ok || !value {
+		t.Fatalf("boolean feature value = %#v, want true", features[0].Value)
+	}
+	if value, ok := features[1].Value.(float64); !ok || value != 36 {
+		t.Fatalf("integer feature value = %#v, want 36", features[1].Value)
+	}
+	if got := identity.Get("$select"); got != "description" {
+		t.Fatalf("caller identity select = %q, want description", got)
+	}
+}
