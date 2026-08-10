@@ -18,6 +18,7 @@ import (
 const (
 	listLicensesPath    = "/api/licensing/v4.3/config/licenses"
 	listLicenseKeysPath = "/api/licensing/v4.3/config/license-keys"
+	listFeaturesPath    = "/api/licensing/v4.3/config/features"
 )
 
 var (
@@ -59,6 +60,17 @@ var (
 			"validationDetail",
 		},
 		AllowExpand: true,
+	}
+	listFeaturesPolicy = odata.Policy{
+		RequiredSelect: []string{
+			"licenseCategory",
+			"licenseSubCategory",
+			"licenseType",
+			"name",
+			"scope",
+			"value",
+			"valueType",
+		},
 	}
 )
 
@@ -192,4 +204,38 @@ func validateLicenseKeys(keys []LicenseKey) error {
 		}
 	}
 	return nil
+}
+
+// ListFeatures returns the available feature inventory and the caller-only query identity.
+func (c *Client) ListFeatures(
+	ctx context.Context,
+	options odata.ListOptions,
+) ([]Feature, url.Values, error) {
+	if c == nil || c.executor == nil {
+		return nil, nil, ErrMissingClient
+	}
+	query, err := odata.Build(options, listFeaturesPolicy)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build listFeatures query: %w", err)
+	}
+	request, err := transport.NewRequest(transport.RequestOptions{
+		Operation:        "listFeatures",
+		Method:           http.MethodGet,
+		PathTemplate:     listFeaturesPath,
+		Query:            query.Values(),
+		ExpectedStatuses: []int{http.StatusOK},
+		RetryClass:       transport.RetryRead,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("build listFeatures request: %w", err)
+	}
+	response, err := c.executor.Execute(ctx, request)
+	if err != nil {
+		return nil, nil, fmt.Errorf("execute listFeatures: %w", err)
+	}
+	features, err := apiresponse.DecodeList[Feature](response.Body())
+	if err != nil {
+		return nil, nil, fmt.Errorf("decode listFeatures response: %w", err)
+	}
+	return features, query.IdentityValues(), nil
 }
