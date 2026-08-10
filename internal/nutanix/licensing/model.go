@@ -59,3 +59,15 @@ type LicenseKeyAssociation struct {
 	AssociationType *string `json:"associationType"`
 	ReclaimType     *string `json:"reclaimType"`
 }
+
+// Feature is the reviewed Licensing v4.3 feature inventory projection.
+// Value is either a boolean or an integer according to the API contract.
+type Feature struct {
+	Name               *string `json:"name"`
+	ValueType          *string `json:"valueType"`
+	Value              any     `json:"value"`
+	LicenseType        *string `json:"licenseType"`
+	LicenseCategory    *string `json:"licenseCategory"`
+	LicenseSubCategory *string `json:"licenseSubCategory"`
+	Scope              *string `json:"scope"`
+}
