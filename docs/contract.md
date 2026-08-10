@@ -85,6 +85,7 @@ object names, and remote identifiers are excluded.
 | `nutanix_operations_v2` | `listOperations` | `GET /api/iam/v4.0/authz/operations` |
 | `nutanix_licenses_v2` | `listLicenses` | `GET /api/licensing/v4.3/config/licenses` |
 | `nutanix_license_keys_v2` | `listLicenseKeys` | `GET /api/licensing/v4.3/config/license-keys` |
+| `nutanix_license_features_v2` | `listFeatures` | `GET /api/licensing/v4.3/config/features` |
 
 ## Managed resources
 
@@ -115,6 +116,12 @@ fields are the Portal `licensing.v4.3.config.LicenseKey` base projection; `assig
 `associationDetails` are nullable unless requested through `expand`. Both data sources use the
 caller-only normalized OData query identity for deterministic state IDs, and preserve explicit
 empty collections separately from absent or null collections.
+
+The license-feature data source exposes the read-only `listFeatures` inventory. Its selected state
+fields are the Portal `licensing.v4.3.config.Feature` projection. The API union value is stored as
+an exact string and interpreted with `value_type`, because the Terraform Plugin Framework does not
+support dynamic types inside list nested attributes. The caller-only query identity includes
+`$page`, `$limit`, `$filter`, `$orderby`, and `$select`.
 
 The category resource manages only user-defined categories. `key` is immutable and forces
 replacement; `value`, `description`, and `owner_uuid` are mutable through the conditional PUT.
