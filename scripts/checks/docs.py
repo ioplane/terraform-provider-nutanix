@@ -18,6 +18,7 @@ GENERATED_DOCS = (
     "data-sources/categories_v2.md",
     "data-sources/clusters_v2.md",
     "data-sources/images_v2.md",
+    "data-sources/license_features_v2.md",
     "data-sources/license_keys_v2.md",
     "data-sources/licenses_v2.md",
     "data-sources/operations_v2.md",

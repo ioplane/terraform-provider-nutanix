@@ -27,6 +27,7 @@ import (
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/cluster"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/image"
 	license "github.com/ioplane/terraform-provider-nutanix/internal/service/license"
+	licensefeature "github.com/ioplane/terraform-provider-nutanix/internal/service/licensefeature"
 	licensekey "github.com/ioplane/terraform-provider-nutanix/internal/service/licensekey"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/operation"
 	"github.com/ioplane/terraform-provider-nutanix/internal/service/placementpolicy"
@@ -375,6 +376,11 @@ func (d configuredProviderData) LicenseKeyReader() licensekey.Reader {
 	return d.licenseClient
 }
 
+// FeatureReader returns the configured Licensing feature-inventory capability.
+func (d configuredProviderData) FeatureReader() licensefeature.Reader {
+	return d.licenseClient
+}
+
 // StorageContainerWriter returns the configured Cluster Management storage-container capability.
 func (d configuredProviderData) StorageContainerWriter() storagecontainer.Writer {
 	return d.clusterClient
@@ -406,5 +412,6 @@ func (p *nutanixProvider) DataSources(context.Context) []func() datasource.DataS
 		operation.NewDataSource,
 		license.NewDataSource,
 		licensekey.NewDataSource,
+		licensefeature.NewDataSource,
 	}
 }

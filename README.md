@@ -34,6 +34,7 @@ Hand-written Terraform Plugin Framework provider for the Nutanix Cloud Platform.
 | `nutanix_operations_v2` | IAM v4.0 (provisional) | [Schema](docs/data-sources/operations_v2.md) |
 | `nutanix_licenses_v2` | Licensing v4.3 (provisional) | [Schema](docs/data-sources/licenses_v2.md) |
 | `nutanix_license_keys_v2` | Licensing v4.3 (provisional) | [Schema](docs/data-sources/license_keys_v2.md) |
+| `nutanix_license_features_v2` | Licensing v4.3 (provisional) | [Schema](docs/data-sources/license_features_v2.md) |
 
 | Terraform resource | Nutanix API | Documentation |
 | --- | --- | --- |

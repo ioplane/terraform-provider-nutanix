@@ -52,7 +52,7 @@ provider "nutanix" {
 		t.Fatalf("GetProviderSchema() diagnostics = %v", schemaResponse.Diagnostics)
 	}
 	if len(schemaResponse.ResourceSchemas) != 4 ||
-		len(schemaResponse.DataSourceSchemas) != 8 ||
+		len(schemaResponse.DataSourceSchemas) != 9 ||
 		len(schemaResponse.Functions) != 0 ||
 		len(schemaResponse.EphemeralResourceSchemas) != 0 ||
 		len(schemaResponse.ListResourceSchemas) != 0 ||

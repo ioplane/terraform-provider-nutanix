@@ -110,6 +110,13 @@ assignment mappings, and key associations by hand. MCP corroboration covers the 
 document and exact endpoint inventory; product acceptance remains deferred under the repository
 verification policy.
 
+The next read-only slice is `listFeatures`, `GET /licensing/v4.3/config/features`, success `200`,
+with a `data` array of `licensing.v4.3.config.Feature`. Its caller query contract is `$page`,
+`$limit`, `$filter`, `$orderby`, and `$select`; the operation permission is `View License Features`.
+The provider maps `name`, `valueType`, the boolean-or-integer `value`, `licenseType`,
+`licenseCategory`, `licenseSubCategory`, and `scope`. The pinned Portal operation block was
+reviewed on 2026-08-10; MCP independently corroborates the same Licensing v4.3 endpoint inventory.
+
 Secondary evidence is accepted only when all applicable integrity checks pass:
 
 1. immutable repository and commit provenance;
