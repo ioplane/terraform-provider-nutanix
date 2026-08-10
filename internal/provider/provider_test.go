@@ -218,8 +218,8 @@ func TestProviderRegistersImplementedTypes(t *testing.T) {
 	if got := len(configured.Resources(context.Background())); got != 4 {
 		t.Fatalf("resource count = %d, want 4", got)
 	}
-	if got := len(configured.DataSources(context.Background())); got != 8 {
-		t.Fatalf("data source count = %d, want 8", got)
+	if got := len(configured.DataSources(context.Background())); got != 9 {
+		t.Fatalf("data source count = %d, want 9", got)
 	}
 }
 
