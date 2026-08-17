@@ -32,13 +32,6 @@ tasks:
         emit terraform terraform version
         emit task task --version
         emit beads bd version
-        python -c 'from importlib.metadata import version; print("podman-py=" + version("podman"))'
-        python -c 'from importlib.metadata import version; print("podman-compose=" + version("podman-compose"))'
-        emit uv uv --version
-        emit ruff ruff --version
-        emit rumdl rumdl --version
-        emit ty ty --version
-        emit yamllint yamllint --version
         emit golangci-lint golangci-lint version
         emit goreleaser goreleaser --version
         emit syft syft version
@@ -50,61 +43,26 @@ tasks:
         emit gh gh --version
         emit hadolint hadolint --version
 
-  python:lock:
-    desc: Resolve the exact Python development dependency lock
-    deps: [_container]
-    dir: /workspace
-    cmds:
-      - uv lock
-
-  python:format:
-    desc: Format role-oriented Python CLI sources
-    deps: [_container]
-    dir: /workspace
-    cmds:
-      - ruff format scripts
-
-  python:format:check:
-    desc: Reject Python CLI formatting drift without rewriting sources
-    deps: [_container]
-    dir: /workspace
-    cmds:
-      - ruff format --check scripts
-
-  python:lint:
-    desc: Lint role-oriented Python CLI sources
-    deps: [_container]
-    dir: /workspace
-    cmds:
-      - ruff check scripts
-
-  python:typecheck:
-    desc: Type-check role-oriented Python CLI sources
-    deps: [_container]
-    dir: /workspace
-    cmds:
-      - ty check scripts
-
   artifacts:discover:
     desc: Discover the live GA-first Nutanix API selection without writes
     deps: [_container]
     dir: /workspace
     cmds:
-      - python -m scripts.artifacts.nutanix discover
+      - go run ./cmd/automation artifacts-discover
 
   artifacts:update:
     desc: Download and lock official Nutanix API artifacts
     deps: [_container]
     dir: /workspace
     cmds:
-      - python -m scripts.artifacts.nutanix update
+      - go run ./cmd/automation artifacts-update
 
   artifacts:verify:
     desc: Verify the live Nutanix registry and every locked artifact
     deps: [_container]
     dir: /workspace
     cmds:
-      - python -m scripts.artifacts.nutanix verify
+      - go run ./cmd/automation artifacts-verify
 
   artifacts:count:
     desc: Print the locked Nutanix namespace count
@@ -112,61 +70,49 @@ tasks:
     dir: /workspace
     silent: true
     cmds:
-      - python -m scripts.artifacts.nutanix count
+      - go run ./cmd/automation artifacts-count
 
   repo:staged-cache-check:
     desc: Reject staged Nutanix vendor artifact bodies
     deps: [_container]
     dir: /workspace
     cmds:
-      - python -m scripts.checks.staged
+      - go run ./cmd/automation staged-cache-check
 
   repo:check:
     desc: Validate repository structure and tracked-file safety
     deps: [_container]
     dir: /workspace
     cmds:
-      - python -m scripts.checks.repository
+      - go run ./cmd/automation repo-check
 
   pins:check:
     desc: Validate immutable container, tool, action, and artifact pins
     deps: [_container]
     dir: /workspace
     cmds:
-      - python -m scripts.checks.pins
+      - go run ./cmd/automation pins-check
 
   tools:check:
     desc: Validate exact machine-readable toolbox versions
     deps: [_container]
     dir: /workspace
     cmds:
-      - python -m scripts.checks.tool_versions
+      - go run ./cmd/automation tools-check
 
   docs:check:
     desc: Lint repository docs, validate internal links, and reject generated drift
     deps: [_container]
     dir: /workspace
     cmds:
-      - >-
-        git ls-files -z --cached --others --exclude-standard -- '*.md' '*.markdown' |
-        sort -zu |
-        xargs -0 --no-run-if-empty rumdl check --color never
-      - >-
-        git ls-files -z --cached --others --exclude-standard -- '*.yml' '*.yaml' |
-        sort -zu |
-        xargs -0 --no-run-if-empty yamllint --strict --config-file .yamllint.yml
-      - python -m scripts.checks.docs_links
-      - SOURCE_DATE_EPOCH=1700000000 python -m scripts.checks.docs
+      - go run ./cmd/automation docs-check
 
   docs:generate:
     desc: Generate the tracked offline Terraform Framework reference pages
     deps: [_container]
     dir: /workspace
     cmds:
-      - >-
-        python -m scripts.generate.provider_docs
-        --root /workspace
-        --source-date-epoch 1700000000
+      - SOURCE_DATE_EPOCH=1700000000 go run ./cmd/automation docs-generate
 
   oci:check:
     desc: Lint the Containerfile and validate the complete Compose model
@@ -177,9 +123,9 @@ tasks:
       - >-
         NUTANIX_GIT_COMMON_DIR=/tmp/nutanix-compose-validation
         NUTANIX_GIT_DIR_RELATIVE=worktrees/validation
-        podman-compose
+        podman compose
         --dry-run
-        -f deployments/compose/compose.dev.yml
+        -f /workspace/deployments/compose/compose.dev.yml
         config >/dev/null
 
   release:check:
@@ -295,7 +241,7 @@ tasks:
     dir: /workspace
     cmds:
       - |
-        test "$(terraform version -json | python -c 'import json, sys; print(json.load(sys.stdin)["terraform_version"])')" = 1.15.8
+        go run ./cmd/automation terraform-version --expected 1.15.8
         TF_ACC=1 \
         TF_ACC_PROVIDER_NAMESPACE=ioplane \
         TF_ACC_TERRAFORM_PATH=/usr/local/bin/terraform \
@@ -303,6 +249,15 @@ tasks:
         go test -count=1 \
           -run '^(TestServeOptions|TestAccProviderProtocol6|TestConfigureTLSConfigurationErrorProtocolDiagnostic)$' \
           ./cmd/terraform-provider-nutanix ./internal/provider
+
+  go:test:containers:
+    desc: Run the explicit Testcontainers boundary suite
+    deps: [_container]
+    dir: /workspace
+    cmds:
+      - >-
+        NUTANIX_TESTCONTAINERS=1
+        go test -count=1 -run '^TestContainerBoundary$' ./internal/testkit
 
   go:format:
     desc: Format Go source
@@ -372,7 +327,7 @@ tasks:
     cmds:
       - >-
         SOURCE_DATE_EPOCH=1700000000
-        python -m scripts.package.provider test --version 0.0.0-dev
+        go run ./cmd/automation package-test
 
   all:
     desc: Run the lightweight implementation build and static gate
@@ -382,9 +337,6 @@ tasks:
       - task: repo:check
       - task: repo:staged-cache-check
       - task: artifacts:verify
-      - task: python:format:check
-      - task: python:lint
-      - task: python:typecheck
       - task: go:format:check
       - task: go:vet
       - task: go:lint

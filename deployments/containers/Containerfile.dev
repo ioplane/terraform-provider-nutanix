@@ -1,4 +1,4 @@
-FROM docker.io/library/golang:1.26-trixie@sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7
+FROM docker.io/library/golang:1.26-trixie@sha256:23fdfd3a6abc97c81e32a724cdd1cf541c06c416eb04d717815f4ed7c75623d0
 
 ARG TASK_VERSION=3.52.0
 ARG BEADS_VERSION=1.1.2
@@ -10,7 +10,6 @@ ARG TFPLUGINDOCS_VERSION=0.25.0
 ARG GOVULNCHECK_VERSION=1.6.0
 ARG GOPLS_VERSION=0.23.0
 ARG GH_VERSION=2.97.0
-ARG UV_VERSION=0.12.1
 ARG HADOLINT_VERSION=2.15.1
 ARG DEBIAN_SNAPSHOT=20260713T000000Z
 
@@ -26,22 +25,16 @@ LABEL org.opencontainers.image.title="Terraform Provider Nutanix Development Too
       org.opencontainers.image.revision="${OCI_REVISION}" \
       org.opencontainers.image.created="${OCI_CREATED}" \
       org.opencontainers.image.base.name="docker.io/library/golang:1.26-trixie" \
-      org.opencontainers.image.base.digest="sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7"
+      org.opencontainers.image.base.digest="sha256:23fdfd3a6abc97c81e32a724cdd1cf541c06c416eb04d717815f4ed7c75623d0"
 
 ENV GOTOOLCHAIN=local \
     CGO_ENABLED=0 \
-    UV_PROJECT_ENVIRONMENT=/opt/venv \
-    UV_PYTHON=/usr/bin/python3 \
-    UV_PYTHON_DOWNLOADS=never \
-    UV_CACHE_DIR=/opt/uv-cache \
-    PATH=/opt/venv/bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    PATH=/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN set -eux; \
     sources=/etc/apt/sources.list.d/debian.sources; \
     debian_snapshot="http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}"; \
     security_snapshot="http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}"; \
-    grep -Fx "# ${debian_snapshot}" "${sources}"; \
-    grep -Fx "# ${security_snapshot}" "${sources}"; \
     grep -Fx 'URIs: http://deb.debian.org/debian' "${sources}"; \
     grep -Fx 'URIs: http://deb.debian.org/debian-security' "${sources}"; \
     sed -i \
@@ -61,7 +54,8 @@ RUN set -eux; \
         curl \
         git \
         openssh-client \
-        python3 \
+        podman \
+        podman-compose \
         unzip; \
     find /var/lib/apt/lists -mindepth 1 -delete
 
@@ -70,8 +64,8 @@ COPY deployments/containers/tool-assets.lock /tmp/tool-assets.lock
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     case "${arch}" in \
-        amd64) goreleaser_arch="x86_64"; uv_arch="x86_64"; hadolint_arch="x86_64" ;; \
-        arm64) goreleaser_arch="arm64"; uv_arch="aarch64"; hadolint_arch="arm64" ;; \
+        amd64) goreleaser_arch="x86_64"; hadolint_arch="x86_64" ;; \
+        arm64) goreleaser_arch="arm64"; hadolint_arch="arm64" ;; \
         *) echo "unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac; \
     tmp="$(mktemp -d)"; \
@@ -131,12 +125,6 @@ RUN set -eux; \
     verify_locked gh "${GH_VERSION}" "${arch}" "${gh_asset}"; \
     tar -xzf "${tmp}/${gh_asset}" -C "${tmp}"; \
     install -m 0755 "${tmp}/gh_${GH_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh; \
-    uv_asset="uv-${uv_arch}-unknown-linux-gnu.tar.gz"; \
-    download "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${uv_asset}" "${tmp}/${uv_asset}"; \
-    verify_locked uv "${UV_VERSION}" "${arch}" "${uv_asset}"; \
-    tar -xzf "${tmp}/${uv_asset}" -C "${tmp}"; \
-    install -m 0755 "${tmp}/uv-${uv_arch}-unknown-linux-gnu/uv" /usr/local/bin/uv; \
-    install -m 0755 "${tmp}/uv-${uv_arch}-unknown-linux-gnu/uvx" /usr/local/bin/uvx; \
     hadolint_asset="hadolint-linux-${hadolint_arch}"; \
     download "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/${hadolint_asset}" "${tmp}/${hadolint_asset}"; \
     verify_locked hadolint "${HADOLINT_VERSION}" "${arch}" "${hadolint_asset}"; \
@@ -150,9 +138,5 @@ RUN set -eux; \
     go clean -cache -modcache
 
 WORKDIR /workspace
-
-COPY pyproject.toml uv.lock ./
-
-RUN uv sync --frozen --all-groups --no-install-project
 
 CMD ["sleep", "infinity"]

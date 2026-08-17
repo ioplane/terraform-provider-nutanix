@@ -5,6 +5,25 @@
 Each phase requires an API contract, hand-written implementation, containerized static gate, and
 deferred product verification before a stable compatibility claim.
 
+## Priority rebaseline — 2026-08-17
+
+The current implementation has 4 registered resources and 9 registered data sources. Development
+priority follows evidence and release risk rather than namespace breadth:
+
+| Priority | Work | Beads | Exit condition |
+| --- | --- | --- | --- |
+| P0 | Rebuild the pinned toolbox on Go 1.26.6 and clear the current standard-library vulnerability baseline | `ntnx-d76.2` | The immutable toolbox reports Go 1.26.6, Protocol 6 and foundation checks pass, and `govulncheck` is clear or has explicit reachable findings tracked |
+| P1 | Close service-layer contract-test debt across the registered surface | `ntnx-c57.1` | Deterministic schema, request, response, state, error, and redaction tests cover each service slice |
+| P1 | Reconcile Licensing v4.3 and IAM contracts with exact portal, MCP, and RE evidence | `ntnx-c57.2`, `ntnx-m2.7`, `ntnx-m9.1` | Exact operation evidence and version-qualified model decisions are recorded before product claims |
+| P1 | Finish the Go/Testcontainers automation migration and keep the Podman runtime gate reproducible | `ntnx-1vw` | No Python execution remains; the host Podman socket runs the bounded Go container test and cleanup is verified |
+| P2 | Review pinned Beads/Syft upgrades and reachable transitive Go updates | `ntnx-d76.4`, `ntnx-d76.1` | Release notes, compatibility, hashes, ABI, SBOM, and complete gates justify each applied update; deferred updates have evidence |
+| P2 | Run authorized product verification for the implemented read-only and resource slices | `ntnx-m2`, `ntnx-m9.1` | Isolated target, bounded cleanup, and independently verified acceptance evidence |
+| P3 | Expand compute, storage, Objects, and external product planes | future slices | Each namespace has its own locked contract, implementation, service tests, and product gate |
+
+The shared kernel and list-data abstractions are already in place, so broad namespace expansion is
+lower priority than proving the existing 13 registrations. No new compatibility surface should be
+added while an earlier priority lacks its contract or product evidence.
+
 ```mermaid
 flowchart LR
   F[Foundation] --> K[Provider kernel]
@@ -22,16 +41,16 @@ flowchart LR
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| Foundation | Reproducible Podman environment, Protocol 6 provider, repository gates | Complete |
+| Foundation | Reproducible Podman environment, Protocol 6 provider, repository gates | Implemented; Go security baseline pending |
 | Kernel | Configuration, authentication, transport, retry, pagination, ETags, task and capability services | Complete |
-| Read-only surface | Cluster, category, image, and subnet data sources | Implemented; product verification pending |
+| Read-only surface | Cluster, category, image, subnet, provisional IAM role and operation, and Licensing v4.3 inventory data sources | Implemented; service coverage and product verification pending |
 | Core resources | Categories, projects, subnets, storage containers, policies, and image placement | Category, subnet, storage-container, and image-placement-policy slices implemented; product verification deferred |
 | Compute and storage | Virtual machines, volume groups, affinity, and block storage | Planned |
 | IAM | Provisional roles and operations; directories, users, groups, policies, and user keys planned | Roles and operations implemented; MCP verification pending |
 | Objects compatibility | Object Store lifecycle compatible with public API constraints | Planned |
 | Compatibility surface | Downstream resource, data-source, import, and state compatibility | Planned |
 | Segmented Objects | Draft, precheck, and deployment actions | Planned |
-| Product expansion | All locked GA v4 namespaces | Licensing v4.3 applied-license and license-key inventories implemented; remaining namespaces planned |
+| Product expansion | All locked GA v4 namespaces | Licensing v4.3 applied-license, license-key, and license-feature inventories implemented; remaining namespaces planned |
 | External planes | Foundation, Foundation Central, NDB, Self-Service, NC2, NKP, NDK, NAI, Move, Beam, and Flow Security Central; deprecated NKE compatibility decision only | Planned |
 
 ## API research snapshot
@@ -50,7 +69,7 @@ the Developer Portal lock and exact-operation corroboration remain the implement
 | Portal version agreement | 15 of 18 indexed v4 families | Preserve the repository-selected version per namespace |
 | Version conflicts | AIOps, Prism, and VMM | Qualify separately; do not replace a locked version |
 | Portal-only namespace | Storage `v4.0.a3` preview | Keep preview status explicit and fail closed |
-| Licensing | Portal v4.3.1 and MCP agree on 17 paths/19 operations; `listLicenses` and `listLicenseKeys` are exact | Keep both read-only inventories provisional until product verification and complete operation evidence gates pass |
+| Licensing | Portal v4.3.1 and MCP agree on 17 paths/19 operations; `listLicenses`, `listLicenseKeys`, and `listFeatures` are exact | Keep all three read-only inventories provisional until product verification and complete operation evidence gates pass |
 | PC 7.6 extraction | Resource Groups, security, Objects data-plane, alerts, and SaaS signals | Treat binary and protobuf results as discrepancy evidence, not REST contracts |
 | PC 7.6 runtime gaps | Projects 2.0, Security Profiles, and Storage Dashboard are Java microservices absent from offline SDK/API artifacts | Require live PC 7.6 extraction and exact public-contract corroboration before adding provider surfaces |
 | Objects and LCM updates | Objects Manager inspection added 86 internal gRPC handlers; LCM inspection added 23 services/193 RPC methods | Keep as product research and discrepancy evidence; do not infer REST routes or Terraform contracts |

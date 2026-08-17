@@ -1,6 +1,6 @@
 # Terraform Provider for Nutanix
 
-[![CI](https://shieldcn.dev/github/ci/ioplane/terraform-provider-nutanix.svg?workflow=CI&branch=main&variant=secondary)](https://github.com/ioplane/terraform-provider-nutanix/actions/workflows/ci.yml)
+[![CI](https://shieldcn.dev/github/ci/ioplane/terraform-provider-nutanix.svg?workflow=CI&branch=dev&variant=secondary)](https://github.com/ioplane/terraform-provider-nutanix/actions/workflows/ci.yml)
 [![Go 1.26](https://shieldcn.dev/badge/Go-1.26-00ADD8.svg?logo=go&variant=secondary)](https://go.dev/doc/go1.26)
 [![Terraform Protocol 6](https://shieldcn.dev/badge/Protocol-6-844FBA.svg?logo=terraform&variant=secondary)](https://developer.hashicorp.com/terraform/plugin/terraform-plugin-protocol)
 [![License](https://shieldcn.dev/github/license/ioplane/terraform-provider-nutanix.svg?variant=secondary)](LICENSE)
@@ -8,8 +8,8 @@
 Hand-written Terraform Plugin Framework provider for the Nutanix Cloud Platform.
 
 > [!WARNING]
-> The provider is pre-release. The implemented data sources are not covered by the deferred
-> product acceptance gate and must not be treated as a stable compatibility surface.
+> The provider is pre-release. The 13 registered Terraform surfaces are not covered by the
+> deferred product acceptance gate and must not be treated as a stable compatibility surface.
 
 ## Provider contract
 
@@ -46,9 +46,9 @@ Hand-written Terraform Plugin Framework provider for the Nutanix Cloud Platform.
 IAM role and operation data sources remain outside the accepted compatibility surface until exact
 Nutanix MCP corroboration and product verification are complete.
 
-The category resource is the first managed-resource slice. It remains outside the accepted
-compatibility surface until product verification and exact MCP operation-level corroboration are
-complete. Actions, functions, and ephemeral resources are not registered.
+All four managed-resource slices remain outside the accepted compatibility surface until product
+verification and exact MCP operation-level corroboration are complete. Actions, functions, and
+ephemeral resources are not registered.
 
 ## Architecture
 
@@ -73,11 +73,11 @@ See the [architecture](docs/architecture.md) and [provider contract](docs/contra
 ### Requirements
 
 - Podman with Compose support;
-- `uv` 0.12.1 for the host launcher environment;
+- Go 1.26 for the host launcher (`./dev`);
 - Git and GitHub CLI for repository control-plane operations.
 
-All development commands run in the pinned Podman toolbox based on
-`golang:1.26-trixie`.
+The host launcher is Go-based. Development commands execute in the pinned Podman toolbox based
+on `golang:1.26-trixie`; test runtime variables are strict YAML in `config/testing.yaml`.
 
 ```bash
 ./dev up
@@ -87,7 +87,7 @@ All development commands run in the pinned Podman toolbox based on
 ./dev down
 ```
 
-`./dev task all` runs formatting, static analysis, vulnerability scanning, artifact validation,
+`./dev task all` runs Go formatting, static analysis, vulnerability scanning, artifact validation,
 documentation validation, release configuration checks, and a provider build. Product tests are
 deferred until the corresponding product corpus is complete.
 

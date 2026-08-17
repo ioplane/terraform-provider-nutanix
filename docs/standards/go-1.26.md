@@ -5,15 +5,15 @@
 | Component | Contract |
 | --- | --- |
 | Module language baseline | `go 1.26.0` |
-| Build toolchain | Go 1.26.5 in the pinned Podman image |
+| Build toolchain | Go 1.26.6 in the current pinned Podman image |
 | Language server | `gopls` 0.23.0 in the same image |
 | Toolchain selection | `GOTOOLCHAIN=local` |
 | Release build | `CGO_ENABLED=0` |
 | Experimental features | Not supported |
 
 The module directive defines minimum language and module semantics. The immutable image selects the
-security-patched build toolchain. Go commands run only through the repository Podman environment;
-the host Go installation is not verification evidence.
+build toolchain and is pinned to the Go 1.26.6 security release. Go commands run only through the
+repository Podman environment; the host Go installation is not verification evidence.
 
 ## Package design
 

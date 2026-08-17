@@ -15,12 +15,14 @@ services:
       GIT_COMMON_DIR: /git-metadata/.git
       GIT_DIR: /git-metadata/.git/${NUTANIX_GIT_DIR_RELATIVE}
       GIT_WORK_TREE: /workspace
+      DOCKER_HOST: unix:///var/run/docker.sock
+      TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: /var/run/docker.sock
     volumes:
       - ../..:/workspace:z
       - ${NUTANIX_GIT_COMMON_DIR:?required}:/git-metadata/.git:z
+      - ${NUTANIX_PODMAN_SOCKET:-/run/podman/podman.sock}:/var/run/docker.sock
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
-      - uv-cache:/opt/uv-cache
     healthcheck:
       test:
         - CMD-SHELL
@@ -32,8 +34,7 @@ services:
           command -v bd >/dev/null &&
           command -v gopls >/dev/null &&
           command -v goreleaser >/dev/null &&
-          command -v syft >/dev/null &&
-          command -v uv >/dev/null
+          command -v syft >/dev/null
       interval: 10s
       timeout: 5s
       retries: 12
@@ -42,4 +43,3 @@ services:
 volumes:
   go-mod-cache: {}
   go-build-cache: {}
-  uv-cache: {}
