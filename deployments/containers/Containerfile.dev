@@ -54,6 +54,8 @@ RUN set -eux; \
         curl \
         git \
         openssh-client \
+        podman \
+        podman-compose \
         unzip; \
     find /var/lib/apt/lists -mindepth 1 -delete
 
