@@ -17,5 +17,3 @@ terraform 1.15.8 amd64 terraform_1.15.8_linux_amd64.zip d25ce7b6902013ad905db3d2
 terraform 1.15.8 arm64 terraform_1.15.8_linux_arm64.zip 8891e9dcedc9e3b8950bc6af9d4d8af1f4cfade3062f53b9dc403a89f6ce8c9c
 tfplugindocs 0.25.0 amd64 tfplugindocs_0.25.0_linux_amd64.zip 912bd663e2deafc9ebf54e932bd2adf91bf6b7fcf545d4d9a82dc9597255854c
 tfplugindocs 0.25.0 arm64 tfplugindocs_0.25.0_linux_arm64.zip de1317d79f2783d68a7a090cbe06dea61dbab20c6376c52eadee42e9e8c7c169
-uv 0.12.1 amd64 uv-x86_64-unknown-linux-gnu.tar.gz 90b2f223fb69d19db49e117da601f64978593417988530aa733d456141b4bcbb
-uv 0.12.1 arm64 uv-aarch64-unknown-linux-gnu.tar.gz 769d373e146692c639b5fbaae33b331c297a32e03d30448772051902df52bbf4

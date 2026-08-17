@@ -96,36 +96,7 @@ func (c *Client) ListLicenses(
 	ctx context.Context,
 	options odata.ListOptions,
 ) ([]License, url.Values, error) {
-	if c == nil || c.executor == nil {
-		return nil, nil, ErrMissingClient
-	}
-	query, err := odata.Build(options, listLicensesPolicy)
-	if err != nil {
-		return nil, nil, fmt.Errorf("build listLicenses query: %w", err)
-	}
-	request, err := transport.NewRequest(transport.RequestOptions{
-		Operation:        "listLicenses",
-		Method:           http.MethodGet,
-		PathTemplate:     listLicensesPath,
-		Query:            query.Values(),
-		ExpectedStatuses: []int{http.StatusOK},
-		RetryClass:       transport.RetryRead,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("build listLicenses request: %w", err)
-	}
-	response, err := c.executor.Execute(ctx, request)
-	if err != nil {
-		return nil, nil, fmt.Errorf("execute listLicenses: %w", err)
-	}
-	licenses, err := apiresponse.DecodeList[License](response.Body())
-	if err != nil {
-		return nil, nil, fmt.Errorf("decode listLicenses response: %w", err)
-	}
-	if err := validateLicenses(licenses); err != nil {
-		return nil, nil, err
-	}
-	return licenses, query.IdentityValues(), nil
+	return listInventory(ctx, c, options, listLicensesPolicy, listLicensesPath, "listLicenses", validateLicenses)
 }
 
 func validateLicenses(licenses []License) error {
@@ -145,36 +116,7 @@ func (c *Client) ListLicenseKeys(
 	ctx context.Context,
 	options odata.ListOptions,
 ) ([]LicenseKey, url.Values, error) {
-	if c == nil || c.executor == nil {
-		return nil, nil, ErrMissingClient
-	}
-	query, err := odata.Build(options, listLicenseKeysPolicy)
-	if err != nil {
-		return nil, nil, fmt.Errorf("build listLicenseKeys query: %w", err)
-	}
-	request, err := transport.NewRequest(transport.RequestOptions{
-		Operation:        "listLicenseKeys",
-		Method:           http.MethodGet,
-		PathTemplate:     listLicenseKeysPath,
-		Query:            query.Values(),
-		ExpectedStatuses: []int{http.StatusOK},
-		RetryClass:       transport.RetryRead,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("build listLicenseKeys request: %w", err)
-	}
-	response, err := c.executor.Execute(ctx, request)
-	if err != nil {
-		return nil, nil, fmt.Errorf("execute listLicenseKeys: %w", err)
-	}
-	keys, err := apiresponse.DecodeList[LicenseKey](response.Body())
-	if err != nil {
-		return nil, nil, fmt.Errorf("decode listLicenseKeys response: %w", err)
-	}
-	if err := validateLicenseKeys(keys); err != nil {
-		return nil, nil, err
-	}
-	return keys, query.IdentityValues(), nil
+	return listInventory(ctx, c, options, listLicenseKeysPolicy, listLicenseKeysPath, "listLicenseKeys", validateLicenseKeys)
 }
 
 func validateLicenseKeys(keys []LicenseKey) error {
@@ -211,31 +153,48 @@ func (c *Client) ListFeatures(
 	ctx context.Context,
 	options odata.ListOptions,
 ) ([]Feature, url.Values, error) {
+	return listInventory[Feature](ctx, c, options, listFeaturesPolicy, listFeaturesPath, "listFeatures", nil)
+}
+
+func listInventory[T any](
+	ctx context.Context,
+	c *Client,
+	options odata.ListOptions,
+	policy odata.Policy,
+	path string,
+	operation string,
+	validate func([]T) error,
+) ([]T, url.Values, error) {
 	if c == nil || c.executor == nil {
 		return nil, nil, ErrMissingClient
 	}
-	query, err := odata.Build(options, listFeaturesPolicy)
+	query, err := odata.Build(options, policy)
 	if err != nil {
-		return nil, nil, fmt.Errorf("build listFeatures query: %w", err)
+		return nil, nil, fmt.Errorf("build %s query: %w", operation, err)
 	}
 	request, err := transport.NewRequest(transport.RequestOptions{
-		Operation:        "listFeatures",
+		Operation:        operation,
 		Method:           http.MethodGet,
-		PathTemplate:     listFeaturesPath,
+		PathTemplate:     path,
 		Query:            query.Values(),
 		ExpectedStatuses: []int{http.StatusOK},
 		RetryClass:       transport.RetryRead,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("build listFeatures request: %w", err)
+		return nil, nil, fmt.Errorf("build %s request: %w", operation, err)
 	}
 	response, err := c.executor.Execute(ctx, request)
 	if err != nil {
-		return nil, nil, fmt.Errorf("execute listFeatures: %w", err)
+		return nil, nil, fmt.Errorf("execute %s: %w", operation, err)
 	}
-	features, err := apiresponse.DecodeList[Feature](response.Body())
+	values, err := apiresponse.DecodeList[T](response.Body())
 	if err != nil {
-		return nil, nil, fmt.Errorf("decode listFeatures response: %w", err)
+		return nil, nil, fmt.Errorf("decode %s response: %w", operation, err)
 	}
-	return features, query.IdentityValues(), nil
+	if validate != nil {
+		if err := validate(values); err != nil {
+			return nil, nil, err
+		}
+	}
+	return values, query.IdentityValues(), nil
 }

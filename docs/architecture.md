@@ -45,6 +45,31 @@ Production code remains under `cmd/` and `internal/`. Catch-all packages named `
 - Service packages receive the smallest consumer-defined interface required by the Terraform type.
 - Configuration constructs clients without a live network call.
 
+## Reuse and ABI guardrails
+
+Shared behavior belongs in the narrowest existing layer that owns its contract:
+
+- `internal/transport` owns HTTPS execution, bounded responses, retries, request identity, and
+  typed HTTP failures.
+- `internal/nutanix/odata` owns list-query validation and caller-query identity.
+- `internal/service/listdata` and `internal/service/listquery` own the common Terraform list-data
+  source lifecycle and query attributes.
+- `internal/task` owns the vendor-neutral asynchronous task state machine; namespace clients only
+  supply task identity and operation policy.
+- Provider composition and service packages keep consumer-defined interfaces local to their users;
+  a shared interface is introduced only when two consumers require the same behavioral contract.
+
+Repeated field mapping remains in the owning service when the Terraform models or null semantics
+are different. Generic helpers are appropriate for identical transport or decoding workflows, as
+demonstrated by the Licensing inventory list helper. This keeps semantic duplication visible while
+avoiding a catch-all conversion package.
+
+The process boundary is Terraform Plugin Protocol 6. `cmd/terraform-provider-nutanix` serves with
+`providerserver.Serve` and `ProtocolVersion: 6`; provider tests use `tfprotov6.ProviderServer` to
+verify schema, configuration, and diagnostic redaction without a live Nutanix target. Changes to
+the provider entry point, framework version, Protocol 6 types, or Go toolchain require the pinned
+container protocol gate before they can be considered compatible.
+
 ## Read lifecycle
 
 ```mermaid

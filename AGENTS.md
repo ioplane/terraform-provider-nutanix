@@ -45,17 +45,33 @@ provisional until the product corpus and authorized acceptance gate are complete
 | Framework | Terraform Plugin Framework `v1.19.0`, Protocol 6 |
 | Language | Go module `github.com/ioplane/terraform-provider-nutanix`, `go 1.26.0` |
 | Build image | `docker.io/library/golang:1.26-trixie@sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7` |
-| Toolbox | Podman Compose development container, launched by `./dev` |
+| Toolbox | Pinned Podman development container, launched by Go `./dev` |
 | IaC test client | Terraform `1.15.8` |
 | Task and tracking | Task `3.52.0`; Beads `1.1.2` |
 | Go quality | `golangci-lint 2.12.2`, `govulncheck 1.6.0`, `gopls 0.23.0` |
-| Documentation | `tfplugindocs 0.25.0`, `rumdl`, `yamllint` |
+| Documentation | `tfplugindocs 0.25.0`, Go-native link and configuration checks |
 | Packaging | GoReleaser `2.17.1`, Syft `1.50.0` |
-| Python launcher | `uv 0.12.1`; project dependencies are frozen by `uv.lock` |
+| Automation launcher | Go 1.26 `go run ./cmd/dev`; strict test runtime configuration is under `config/testing.yaml` |
 
 The direct Go modules are pinned in `go.mod`; Nutanix SDKs, generated API clients, Terraform
 SDKv2, generic REST abstractions, and runtime code generation are prohibited. OpenAPI, Postman,
 error references, official SDK examples, and MCP results are evidence inputs only.
+
+### Version update policy
+
+- The current toolbox baseline remains the exact versions in this table, `Containerfile.dev`, and
+  `tool-assets.lock`; an upstream release is not adopted until its asset hashes and complete
+  containerized gates are verified.
+- The 2026-08-17 review identified Go 1.26.6 as a P0 security update because the current Go 1.26.5
+  toolbox exposes reachable standard-library advisories. Track the rebuild and ABI/vulnerability
+  recheck in Beads `ntnx-d76.2`.
+- Beads 1.2.2 and Syft 1.51.0 are available but remain separate P2 upgrades (`ntnx-d76.4`) because
+  Beads has a documented database recovery concern and Syft changes packaging/SBOM output.
+- Direct provider modules are current according to the reviewed module channels. Do not run a mass
+  `go get -u`; review reachable transitive changes and Protocol 6 compatibility under `ntnx-d76.1`.
+- Keep runtime test values in `config/testing.yaml`. Do not duplicate module or tool versions in YAML
+  or TOML; `go.mod`/`go.sum`, `Containerfile.dev`, and `tool-assets.lock` remain the authorities for
+  their respective version classes.
 
 ## Architecture and ownership
 
@@ -81,6 +97,9 @@ Keep production code under `cmd/` and `internal/`. Avoid catch-all packages such
 
 - Run Go commands inside the pinned Podman environment through `./dev`; host toolchains are not
   completion evidence.
+- Container-bound tests use the host Podman API socket only. Fresh toolbox runs must mount
+  `/run/podman/podman.sock` as `/var/run/docker.sock`, set the Docker-compatible endpoint, and use
+  Testcontainers `ProviderPodman`; a Docker daemon is not a supported test dependency.
 - Use `context.Context` as the first argument for request-bound work. Do not store contexts.
 - Preserve causes with `%w`; error text starts lower-case and has no terminal punctuation.
 - Bound every HTTP response body, close every response body, preserve cancellation, and use explicit
@@ -116,10 +135,13 @@ Use the focused gates when the change requires them:
 ./dev down
 ```
 
-`./dev task all` covers repository and artifact checks, Python formatting/lint/type checking,
-Go formatting, vet, production lint, vulnerability scanning, documentation, OCI, pin/tool
-versions, release configuration, and the provider build. Product acceptance and live tests are
-separate gates; a deferred, skipped, unavailable, or partially cleaned live gate is not green.
+`./dev task all` covers repository and artifact checks, Go formatting, vet, production lint,
+vulnerability scanning, documentation, OCI, pin/tool versions, release configuration, and the
+provider build. The current pinned Go 1.26.5 image is not a green vulnerability gate; completion
+requires `ntnx-d76.2`. Repository checks, deterministic packaging, artifact locking, and
+documentation generation are implemented by `cmd/automation` and `internal/automation`.
+Product acceptance and live tests are separate gates; a deferred, skipped, unavailable, or
+partially cleaned live gate is not green.
 
 Generated documentation must be regenerated through `./dev task docs:generate`; never hand-edit a
 generated page. `go.mod` and `go.sum` changes require exact version review, `go mod tidy`, the

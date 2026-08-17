@@ -27,8 +27,9 @@ documented product behavior and stable error contracts.
 
 ## Execution boundary
 
-All Go, Terraform, Python CLI, build, packaging, and product-test commands run inside Podman through
-`./dev`. Host toolchains are not completion evidence.
+All Go, Terraform, automation, build, packaging, and product-test commands run inside Podman
+through `./dev`. Host toolchains are not completion evidence. The launcher and repository gates
+are Go-based.
 
 The default implementation gate is:
 
@@ -36,8 +37,24 @@ The default implementation gate is:
 ./dev task all
 ```
 
-It intentionally excludes Python tooling tests, Go unit tests, fuzzing, race tests, Protocol
-acceptance, package acceptance, and live acceptance until their owning product phase requires them.
+It intentionally excludes Go unit tests, fuzzing, race tests, Protocol acceptance, package
+acceptance, and live acceptance until their owning product phase requires them.
+
+## Protocol 6 and ABI-sensitive boundary
+
+The provider executable serves Terraform Plugin Protocol 6 through
+`providerserver.Serve`. Provider-boundary changes must run the pinned container check:
+
+```bash
+./dev task go:test:protocol
+```
+
+This check uses Terraform 1.15.8 and exercises the Protocol 6 server, provider schema,
+configuration, and sensitive-diagnostic redaction without contacting Nutanix. It verifies the
+framework/protocol boundary and build compatibility; it does not prove API payload compatibility,
+Terraform lifecycle behavior for every registered object, or live-product acceptance. Run the
+focused Go tests, race tests, package gate, and authorized product gates separately when their
+owning change requires them.
 
 ## Live acceptance
 
@@ -52,12 +69,26 @@ Live tests require all of the following:
 
 A skipped, unavailable, or partially cleaned live gate is not passed evidence.
 
+## Container-backed Go integration tests
+
+Container-bound behavior uses `testcontainers-go` from Go tests with the explicit `ProviderPodman`
+provider, one suite-level container, bounded readiness, strict configuration from
+`config/testing.yaml`, and cleanup registered through `t.Cleanup`. The repository disables Ryuk for
+this single bounded test because the rootful Podman API does not provide Docker's `bridge` network;
+the test's explicit cleanup remains mandatory. The explicit gate is:
+
+```bash
+./dev task go:test:containers
+```
+
+The default provider HTTP tests remain in-process and do not make outbound product calls.
+
 ## CI/CD
 
-GitHub Actions invokes `./dev task all` for pull requests and `main`. Release artifacts are built
-inside the same Podman boundary after a Release Please PR creates a SemVer tag. If GitLab CI is
-added, jobs invoke small role-oriented Python CLI modules with explicit inputs, deterministic exit
-codes, and concise output.
+GitHub Actions invokes `./dev task all` for pull requests and pushes to the `dev` integration or
+`main` release branch. Release artifacts are built inside the same Podman boundary after a Release
+Please PR creates a SemVer tag. If GitLab CI is added, jobs invoke the Go automation binary with
+explicit inputs, deterministic exit codes, and concise output.
 
 ## References
 

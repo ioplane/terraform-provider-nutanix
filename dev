@@ -1,3 +1,6 @@
 #!/bin/sh
 set -eu
-exec uvx --from uv==0.12.1 uv run --frozen python -m scripts.automation.cli "$@"
+launcher_cache="${NUTANIX_DEV_GO_CACHE:-/tmp/nutanix-provider-go-build}"
+launcher_modcache="${NUTANIX_DEV_GO_MODCACHE:-/tmp/nutanix-provider-go-mod}"
+mkdir -p "$launcher_cache" "$launcher_modcache"
+GOCACHE="$launcher_cache" GOMODCACHE="$launcher_modcache" exec go run ./cmd/dev "$@"
