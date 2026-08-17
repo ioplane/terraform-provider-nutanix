@@ -569,7 +569,7 @@ func ArtifactsCount(root string) (int, error) {
 }
 
 var expectedTools = map[string]string{
-	"go": "1.26.5", "terraform": "1.15.8", "task": "3.52.0", "beads": "1.1.2",
+	"go": "1.26.6", "terraform": "1.15.8", "task": "3.52.0", "beads": "1.1.2",
 	"golangci-lint": "2.12.2", "goreleaser": "2.17.1", "syft": "1.50.0",
 	"tfplugindocs": "0.25.0", "govulncheck": "1.6.0", "gopls": "0.23.0",
 	"gh": "2.97.0", "hadolint": "2.15.1",

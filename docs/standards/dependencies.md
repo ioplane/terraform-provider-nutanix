@@ -18,7 +18,7 @@ applied release.
 
 | Component | Current repository baseline | Review result | Follow-up |
 | --- | --- | --- | --- |
-| Go toolbox | Go 1.26.5, `golang:1.26-trixie` pinned by digest | Go 1.26.6 is current and required because the current `govulncheck` run reports four reachable standard-library advisories | `ntnx-d76.2` (P0) |
+| Go toolbox | Go 1.26.6, `golang:1.26-trixie` pinned by digest | Applied; `govulncheck` reports no reachable vulnerabilities in the pinned toolbox | Verified in `ntnx-d76.2` (P0) |
 | Terraform Plugin Framework | `v1.19.0` | Direct module channel reports no newer version; Protocol 6 ABI tests remain required | Keep baseline |
 | Terraform Plugin Go/testing/validators/log | `v0.31.0` / `v1.16.0` / `v0.19.0` / `v0.11.0` | Direct module channels report no newer versions | Keep baseline |
 | Testcontainers Go | `v0.44.0` | Podman-only runtime passes with the host socket, explicit `ProviderPodman`, strict YAML, and `t.Cleanup` | Verified; `ntnx-d76.3` closed |
