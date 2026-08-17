@@ -42,4 +42,9 @@ func TestConfiguredContainerHostPrefersContainerHostAndFallsBackToDockerHost(t *
 	if got := configuredContainerHost(); got != "unix:///run/podman/fallback.sock" {
 		t.Fatalf("configuredContainerHost() = %q, want DOCKER_HOST fallback", got)
 	}
+
+	t.Setenv("DOCKER_HOST", "")
+	if got := configuredContainerHost(); got != defaultHost {
+		t.Fatalf("configuredContainerHost() = %q, want default Podman socket", got)
+	}
 }

@@ -85,6 +85,21 @@ func TestVersionRankOrdersVersions(t *testing.T) {
 	}
 }
 
+func TestChooseArtifactVersionSelectsHighestGARegardlessOfRegistryOrder(t *testing.T) {
+	entries := []map[string]any{
+		{"version": "v4.2"},
+		{"version": "v4.3"},
+		{"version": "v4.4.rc1"},
+	}
+	chosen, err := chooseArtifactVersion(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := chosen["version"]; got != "v4.3" {
+		t.Fatalf("chosen version = %v, want v4.3", got)
+	}
+}
+
 func TestParseToolVersionUsesScannerVersionForGovulncheck(t *testing.T) {
 	output := []byte("Go: go1.26.5\nScanner: govulncheck@v1.6.0\n")
 	version, err := parseToolVersion("govulncheck", output)

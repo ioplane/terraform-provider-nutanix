@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"sort"
@@ -481,6 +482,19 @@ func GenerateDocs(ctx context.Context, root, version string, epoch int64) error 
 		return err
 	}
 	defer func() { _ = os.RemoveAll(temporary) }()
+	rendered := filepath.Join(temporary, "rendered")
+	if err := generateDocs(ctx, root, version, epoch, rendered); err != nil {
+		return err
+	}
+	return copyGeneratedDocs(root, rendered)
+}
+
+func generateDocs(ctx context.Context, root, version string, epoch int64, rendered string) error {
+	temporary, err := os.MkdirTemp("", "nutanix-docs-work-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(temporary) }()
 	schema, err := OfflineSchema(ctx, root, filepath.Join(temporary, "schema"), version, epoch)
 	if err != nil {
 		return err
@@ -503,19 +517,22 @@ func GenerateDocs(ctx context.Context, root, version string, epoch int64) error 
 	if err = os.WriteFile(schemaPath, append(encoded, '\n'), 0o644); err != nil {
 		return err
 	}
-	rendered := filepath.Join(temporary, "rendered")
 	providerDir := filepath.Join(root, "cmd", "terraform-provider-nutanix")
 	relativeTemporary, err := filepath.Rel(providerDir, temporary)
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, "tfplugindocs", "generate", "--provider-dir", ".", "--provider-name", "nutanix", "--rendered-provider-name", "Nutanix", "--examples-dir", "../../examples", "--providers-schema", filepath.ToSlash(filepath.Join(relativeTemporary, "provider-schema.json")), "--rendered-website-dir", filepath.ToSlash(filepath.Join(relativeTemporary, "rendered")), "--website-temp-dir", filepath.ToSlash(filepath.Join(relativeTemporary, "website-work")))
+	relativeRendered, err := filepath.Rel(providerDir, rendered)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, "tfplugindocs", "generate", "--provider-dir", ".", "--provider-name", "nutanix", "--rendered-provider-name", "Nutanix", "--examples-dir", "../../examples", "--providers-schema", filepath.ToSlash(filepath.Join(relativeTemporary, "provider-schema.json")), "--rendered-website-dir", filepath.ToSlash(relativeRendered), "--website-temp-dir", filepath.ToSlash(filepath.Join(relativeTemporary, "website-work")))
 	cmd.Dir = providerDir
 	output, runErr := cmd.CombinedOutput()
 	if runErr != nil {
 		return &CommandError{Name: "tfplugindocs", Output: string(output), Err: runErr}
 	}
-	return copyGeneratedDocs(root, rendered)
+	return nil
 }
 
 func copyGeneratedDocs(root, rendered string) error {
@@ -574,6 +591,20 @@ var expectedTools = map[string]string{
 	"tfplugindocs": "0.25.0", "govulncheck": "1.6.0", "gopls": "0.23.0",
 	"gh": "2.97.0", "hadolint": "2.15.1",
 }
+
+const (
+	expectedBaseImage           = "docker.io/library/golang:1.26-trixie@sha256:23fdfd3a6abc97c81e32a724cdd1cf541c06c416eb04d717815f4ed7c75623d0"
+	expectedContainerfileSHA256 = "da5492186db9d5cf20ed7dce958720523a429b522710e8014131db6fae8d0484"
+	expectedToolAssetLockSHA256 = "95f5408731d249619d83bdfe89dc9f7f1f75ea77ddb72d5ace5701cbca00c8e5"
+)
+
+var expectedWorkflowUses = map[string]int{
+	"actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1":                 2,
+	"googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7": 1,
+}
+
+var workflowUsesPattern = regexp.MustCompile(`(?m)^\s*uses:\s*([^\s#]+)`)
+var immutableDigestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func toolVersion(ctx context.Context, root, name string, args ...string) (string, error) {
 	output, err := command(ctx, root, name, args...)
@@ -643,6 +674,103 @@ func PinsCheck(root string) error {
 			diagnostics = append(diagnostics, "Python automation reference remains: "+relative)
 		}
 	}
+	containerPath := filepath.Join(root, "deployments/containers/Containerfile.dev")
+	containerBody, err := os.ReadFile(containerPath)
+	if err != nil {
+		diagnostics = append(diagnostics, "pin file missing: deployments/containers/Containerfile.dev")
+	} else {
+		digest := sha256.Sum256(containerBody)
+		if hex.EncodeToString(digest[:]) != expectedContainerfileSHA256 {
+			diagnostics = append(diagnostics, "development Containerfile digest differs")
+		}
+		if !bytes.Contains(containerBody, []byte("FROM "+expectedBaseImage)) {
+			diagnostics = append(diagnostics, "development base image digest differs")
+		}
+		lockPath := filepath.Join(root, "deployments/containers/tool-assets.lock")
+		lockBody, lockErr := os.ReadFile(lockPath)
+		if lockErr != nil {
+			diagnostics = append(diagnostics, "pin file missing: deployments/containers/tool-assets.lock")
+		} else if !bytes.Contains(lockBody, []byte("# tool version architecture asset sha256")) {
+			diagnostics = append(diagnostics, "tool asset lock header differs")
+		} else {
+			digest := sha256.Sum256(lockBody)
+			if hex.EncodeToString(digest[:]) != expectedToolAssetLockSHA256 {
+				diagnostics = append(diagnostics, "tool asset lock digest differs")
+			}
+			for _, line := range strings.Split(string(lockBody), "\n") {
+				fields := strings.Fields(line)
+				if len(fields) == 0 || strings.HasPrefix(fields[0], "#") {
+					continue
+				}
+				if len(fields) != 5 || !immutableDigestPattern.MatchString(fields[4]) {
+					diagnostics = append(diagnostics, "tool asset lock entry is malformed")
+					break
+				}
+			}
+		}
+	}
+	for _, workflow := range []string{".github/workflows/ci.yml", ".github/workflows/release.yml"} {
+		body, readErr := os.ReadFile(filepath.Join(root, workflow))
+		if readErr != nil {
+			diagnostics = append(diagnostics, "workflow missing: "+workflow)
+			continue
+		}
+		for _, reference := range workflowUsesPattern.FindAllStringSubmatch(string(body), -1) {
+			if _, ok := expectedWorkflowUses[reference[1]]; !ok {
+				diagnostics = append(diagnostics, "workflow action pin differs: "+reference[1])
+			}
+		}
+	}
+	observedUses := map[string]int{}
+	for _, workflow := range []string{".github/workflows/ci.yml", ".github/workflows/release.yml"} {
+		body, readErr := os.ReadFile(filepath.Join(root, workflow))
+		if readErr != nil {
+			continue
+		}
+		for _, reference := range workflowUsesPattern.FindAllStringSubmatch(string(body), -1) {
+			observedUses[reference[1]]++
+		}
+	}
+	if !reflect.DeepEqual(observedUses, expectedWorkflowUses) {
+		diagnostics = append(diagnostics, "workflow action set differs")
+	}
+	manifestPath := filepath.Join(root, "specs/nutanix/manifest.json")
+	manifestBody, manifestErr := os.ReadFile(manifestPath)
+	if manifestErr != nil {
+		diagnostics = append(diagnostics, "pin file missing: specs/nutanix/manifest.json")
+	} else {
+		var manifest struct {
+			SchemaVersion int    `json:"schema_version"`
+			Source        string `json:"source"`
+			Namespaces    []struct {
+				Name      string `json:"name"`
+				Version   string `json:"version"`
+				Stability string `json:"stability"`
+				Artifacts map[string]struct {
+					URL    string `json:"url"`
+					Bytes  int    `json:"bytes"`
+					SHA256 string `json:"sha256"`
+					Path   string `json:"path"`
+				} `json:"artifacts"`
+			} `json:"namespaces"`
+		}
+		if json.Unmarshal(manifestBody, &manifest) != nil || manifest.SchemaVersion != 1 || manifest.Source != NutanixAPIBase || len(manifest.Namespaces) == 0 {
+			diagnostics = append(diagnostics, "artifact manifest shape differs")
+		} else {
+			for _, namespace := range manifest.Namespaces {
+				if namespace.Name == "" || namespace.Version == "" || namespace.Stability == "" || len(namespace.Artifacts) == 0 {
+					diagnostics = append(diagnostics, "artifact manifest namespace is incomplete")
+					break
+				}
+				for kind, artifact := range namespace.Artifacts {
+					if artifact.URL == "" || artifact.Bytes <= 0 || !immutableDigestPattern.MatchString(artifact.SHA256) || artifact.Path == "" {
+						diagnostics = append(diagnostics, "artifact manifest entry is incomplete: "+kind)
+						break
+					}
+				}
+			}
+		}
+	}
 	if len(diagnostics) > 0 {
 		return errors.New(strings.Join(diagnostics, "\n"))
 	}
@@ -669,6 +797,73 @@ func DocsCheck(ctx context.Context, root string) error {
 	}
 	if err := DocsLinksCheck(ctx, root); err != nil {
 		return err
+	}
+	temporary, err := os.MkdirTemp("", "nutanix-docs-check-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(temporary) }()
+	rendered := filepath.Join(temporary, "rendered")
+	if err := generateDocs(ctx, root, DefaultVersion, SourceDateEpoch, rendered); err != nil {
+		return fmt.Errorf("generated documentation: %w", err)
+	}
+	return validateGeneratedDocs(root, rendered)
+}
+
+var generatedDocumentation = []string{
+	"data-sources/categories_v2.md",
+	"data-sources/clusters_v2.md",
+	"data-sources/images_v2.md",
+	"data-sources/license_features_v2.md",
+	"data-sources/license_keys_v2.md",
+	"data-sources/licenses_v2.md",
+	"data-sources/operations_v2.md",
+	"data-sources/roles_v2.md",
+	"data-sources/subnet_v2.md",
+	"index.md",
+	"resources/category.md",
+	"resources/image_placement_policy.md",
+	"resources/storage_container.md",
+	"resources/subnet.md",
+}
+
+func validateGeneratedDocs(root, rendered string) error {
+	observed := make([]string, 0, len(generatedDocumentation))
+	err := filepath.Walk(rendered, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(rendered, path)
+		if err != nil {
+			return err
+		}
+		observed = append(observed, filepath.ToSlash(relative))
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	sort.Strings(observed)
+	want := append([]string(nil), generatedDocumentation...)
+	sort.Strings(want)
+	if !reflect.DeepEqual(observed, want) {
+		return errors.New("generated documentation file set differs")
+	}
+	for _, relative := range want {
+		tracked, err := os.ReadFile(filepath.Join(root, "docs", filepath.FromSlash(relative)))
+		if err != nil {
+			return fmt.Errorf("generated documentation missing: docs/%s", relative)
+		}
+		generated, err := os.ReadFile(filepath.Join(rendered, filepath.FromSlash(relative)))
+		if err != nil {
+			return fmt.Errorf("generated documentation missing from render: %s", relative)
+		}
+		if !bytes.Equal(tracked, generated) {
+			return fmt.Errorf("generated documentation differs: docs/%s", relative)
+		}
 	}
 	return nil
 }
@@ -794,6 +989,35 @@ func versionRank(version string) ([4]int, bool, bool) {
 
 func atoi(value string) int { parsed, _ := strconv.Atoi(value); return parsed }
 
+func chooseArtifactVersion(entries []map[string]any) (map[string]any, error) {
+	var chosen map[string]any
+	var rank [4]int
+	ga := false
+	for _, entry := range entries {
+		raw, ok := entry["version"].(string)
+		if !ok {
+			return nil, errors.New("version must be a string")
+		}
+		candidateRank, supported, candidateGA := versionRank(raw)
+		if !supported {
+			continue
+		}
+		if candidateGA {
+			if !ga || compareRank(candidateRank, rank) > 0 {
+				chosen, rank, ga = entry, candidateRank, true
+			}
+			continue
+		}
+		if !ga && (chosen == nil || compareRank(candidateRank, rank) > 0) {
+			chosen, rank = entry, candidateRank
+		}
+	}
+	if chosen == nil {
+		return nil, errors.New("no supported GA or preview version")
+	}
+	return chosen, nil
+}
+
 func discoverArtifacts(ctx context.Context, client *artifactClient) ([]artifactSelection, error) {
 	var registry struct {
 		Namespaces []struct {
@@ -824,28 +1048,13 @@ func discoverArtifacts(ctx context.Context, client *artifactClient) ([]artifactS
 		if versions.Namespace != namespace.Name || len(versions.Versions) == 0 {
 			return nil, fmt.Errorf("versions %s: invalid response", namespace.Name)
 		}
-		var chosen map[string]any
-		var rank [4]int
-		ga := false
-		for _, entry := range versions.Versions {
-			raw, ok := entry["version"].(string)
-			if !ok {
-				return nil, fmt.Errorf("versions %s: version must be a string", namespace.Name)
-			}
-			candidateRank, supported, candidateGA := versionRank(raw)
-			if !supported || (candidateGA && ga) || (!candidateGA && ga) {
-				continue
-			}
-			if !ga || candidateGA && compareRank(candidateRank, rank) > 0 || !candidateGA && compareRank(candidateRank, rank) > 0 {
-				chosen, rank, ga = entry, candidateRank, candidateGA
-			}
-		}
-		if chosen == nil {
-			return nil, fmt.Errorf("versions %s: no supported GA or preview version", namespace.Name)
+		chosen, err := chooseArtifactVersion(versions.Versions)
+		if err != nil {
+			return nil, fmt.Errorf("versions %s: %w", namespace.Name, err)
 		}
 		version, _ := chosen["version"].(string)
 		stability := "preview"
-		if ga {
+		if _, supported, candidateGA := versionRank(version); supported && candidateGA {
 			stability = "ga"
 		}
 		selection := artifactSelection{Name: namespace.Name, Version: version, Stability: stability, Artifacts: map[string]artifactMetadata{}}

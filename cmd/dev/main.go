@@ -17,6 +17,7 @@ import (
 const (
 	projectPrefix = "nutanix-provider-"
 	serviceName   = "dev"
+	defaultHost   = "unix:///run/podman/podman.sock"
 	containerWait = 180 * time.Second
 	commandWait   = 60 * time.Minute
 )
@@ -172,7 +173,10 @@ func configuredContainerHost() string {
 	if host := os.Getenv("CONTAINER_HOST"); host != "" {
 		return host
 	}
-	return os.Getenv("DOCKER_HOST")
+	if host := os.Getenv("DOCKER_HOST"); host != "" {
+		return host
+	}
+	return defaultHost
 }
 
 func appendContainerRuntime(arguments []string, containerHost string) []string {
