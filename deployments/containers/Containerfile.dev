@@ -35,8 +35,6 @@ RUN set -eux; \
     sources=/etc/apt/sources.list.d/debian.sources; \
     debian_snapshot="http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}"; \
     security_snapshot="http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}"; \
-    grep -Fx "# ${debian_snapshot}" "${sources}"; \
-    grep -Fx "# ${security_snapshot}" "${sources}"; \
     grep -Fx 'URIs: http://deb.debian.org/debian' "${sources}"; \
     grep -Fx 'URIs: http://deb.debian.org/debian-security' "${sources}"; \
     sed -i \
