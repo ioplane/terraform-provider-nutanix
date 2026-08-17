@@ -1,4 +1,4 @@
-FROM docker.io/library/golang:1.26-trixie@sha256:23fdfd3a6abc97c81e32a724cdd1cf541c06c416eb04d717815f4ed7c75623d0
+FROM docker.io/library/golang:1.26-trixie@sha256:b75d466dd608587fd66cca705a307ba65b889827d06ad61d6a75f0482b51b7c7
 
 ARG TASK_VERSION=3.52.0
 ARG BEADS_VERSION=1.1.2
