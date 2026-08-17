@@ -1,4 +1,4 @@
-FROM docker.io/library/golang:1.26-trixie@sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7
+FROM docker.io/library/golang:1.26-trixie@sha256:23fdfd3a6abc97c81e32a724cdd1cf541c06c416eb04d717815f4ed7c75623d0
 
 ARG TASK_VERSION=3.52.0
 ARG BEADS_VERSION=1.1.2
@@ -25,7 +25,7 @@ LABEL org.opencontainers.image.title="Terraform Provider Nutanix Development Too
       org.opencontainers.image.revision="${OCI_REVISION}" \
       org.opencontainers.image.created="${OCI_CREATED}" \
       org.opencontainers.image.base.name="docker.io/library/golang:1.26-trixie" \
-      org.opencontainers.image.base.digest="sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7"
+      org.opencontainers.image.base.digest="sha256:23fdfd3a6abc97c81e32a724cdd1cf541c06c416eb04d717815f4ed7c75623d0"
 
 ENV GOTOOLCHAIN=local \
     CGO_ENABLED=0 \

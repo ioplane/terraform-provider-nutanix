@@ -44,7 +44,7 @@ provisional until the product corpus and authorized acceptance gate are complete
 | Provider | Terraform provider `ioplane/nutanix`, type `nutanix` |
 | Framework | Terraform Plugin Framework `v1.19.0`, Protocol 6 |
 | Language | Go module `github.com/ioplane/terraform-provider-nutanix`, `go 1.26.0` |
-| Build image | `docker.io/library/golang:1.26-trixie@sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7` |
+| Build image | `docker.io/library/golang:1.26-trixie@sha256:23fdfd3a6abc97c81e32a724cdd1cf541c06c416eb04d717815f4ed7c75623d0` (Go 1.26.6) |
 | Toolbox | Pinned Podman development container, launched by Go `./dev` |
 | IaC test client | Terraform `1.15.8` |
 | Task and tracking | Task `3.52.0`; Beads `1.1.2` |
@@ -62,9 +62,9 @@ error references, official SDK examples, and MCP results are evidence inputs onl
 - The current toolbox baseline remains the exact versions in this table, `Containerfile.dev`, and
   `tool-assets.lock`; an upstream release is not adopted until its asset hashes and complete
   containerized gates are verified.
-- The 2026-08-17 review identified Go 1.26.6 as a P0 security update because the current Go 1.26.5
-  toolbox exposes reachable standard-library advisories. Track the rebuild and ABI/vulnerability
-  recheck in Beads `ntnx-d76.2`.
+- The 2026-08-17 P0 Go 1.26.6 security update is applied to the pinned toolbox. Keep the
+  vulnerability and ABI recheck in the delivery evidence for every toolbox rebuild; the completed
+  update is recorded in Beads `ntnx-d76.2`.
 - Beads 1.2.2 and Syft 1.51.0 are available but remain separate P2 upgrades (`ntnx-d76.4`) because
   Beads has a documented database recovery concern and Syft changes packaging/SBOM output.
 - Direct provider modules are current according to the reviewed module channels. Do not run a mass
@@ -137,8 +137,7 @@ Use the focused gates when the change requires them:
 
 `./dev task all` covers repository and artifact checks, Go formatting, vet, production lint,
 vulnerability scanning, documentation, OCI, pin/tool versions, release configuration, and the
-provider build. The current pinned Go 1.26.5 image is not a green vulnerability gate; completion
-requires `ntnx-d76.2`. Repository checks, deterministic packaging, artifact locking, and
+provider build. The pinned Go 1.26.6 image is the current vulnerability baseline. Repository checks, deterministic packaging, artifact locking, and
 documentation generation are implemented by `cmd/automation` and `internal/automation`.
 Product acceptance and live tests are separate gates; a deferred, skipped, unavailable, or
 partially cleaned live gate is not green.
