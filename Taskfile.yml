@@ -125,7 +125,7 @@ tasks:
         NUTANIX_GIT_DIR_RELATIVE=worktrees/validation
         podman compose
         --dry-run
-        -f deployments/compose/compose.dev.yml
+        -f /workspace/deployments/compose/compose.dev.yml
         config >/dev/null
 
   release:check:
