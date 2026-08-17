@@ -26,24 +26,25 @@ manifest records that status explicitly.
 | Namespace | Version | Stability |
 | --- | --- | --- |
 | `aiops` | `v4.0` | GA |
-| `clustermgmt` | `v4.2` | GA |
-| `datapolicies` | `v4.2` | GA |
-| `dataprotection` | `v4.3` | GA |
+| `clustermgmt` | `v4.3` | GA |
+| `datapolicies` | `v4.3` | GA |
+| `dataprotection` | `v4.4` | GA |
 | `files` | `v4.0` | GA |
 | `iam` | `v4.0` | GA |
-| `licensing` | `v4.3` | GA |
-| `lifecycle` | `v4.2` | GA |
-| `microseg` | `v4.2` | GA |
-| `monitoring` | `v4.2` | GA |
+| `licensing` | `v4.4` | GA |
+| `lifecycle` | `v4.3` | GA |
+| `microseg` | `v4.3` | GA |
+| `monitoring` | `v4.3` | GA |
 | `multidomain` | `v4.3` | GA |
-| `networking` | `v4.3` | GA |
-| `objects` | `v4.0` | GA |
+| `networking` | `v4.4` | GA |
+| `objects` | `v4.1` | GA |
 | `opsmgmt` | `v4.0` | GA |
-| `prism` | `v4.3` | GA |
+| `prism` | `v4.4` | GA |
 | `security` | `v4.1` | GA |
 | `storage` | `v4.0.a3` | Preview; no GA published |
-| `vmm` | `v4.2` | GA |
-| `volumes` | `v4.2` | GA |
+| `tenancy` | `v4.0.a1` | Preview; no GA published |
+| `vmm` | `v4.3` | GA |
+| `volumes` | `v4.3` | GA |
 
 ## Manifest and cache
 
