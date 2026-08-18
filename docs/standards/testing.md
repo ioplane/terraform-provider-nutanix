@@ -83,6 +83,17 @@ the test's explicit cleanup remains mandatory. The explicit gate is:
 
 The default provider HTTP tests remain in-process and do not make outbound product calls.
 
+## Service contract coverage
+
+Every registered data source and resource has a package-local contract test. These deterministic
+tests verify the Framework metadata and schema shape, exercise the state projection with empty or
+partially populated API models, and cover the invalid-identity or incomplete-response boundary
+where the service exposes one. The shared `internal/service/testkit` assertions keep metadata and
+attribute-mode checks consistent without coupling service packages to one another.
+
+This layer proves provider-side schema and mapping behavior only. It does not replace the local
+HTTP fixture tests, Terraform lifecycle tests, product acceptance, or live Nutanix verification.
+
 ## CI/CD
 
 GitHub Actions invokes `./dev task all` for pull requests and pushes to the `dev` integration or
