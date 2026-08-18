@@ -9,14 +9,20 @@ import (
 )
 
 func TestResourceContract(t *testing.T) {
-	required := testkit.AttributeFlags{Required: true}
-	optionalComputed := testkit.AttributeFlags{Optional: true, Computed: true}
-	computed := testkit.AttributeFlags{Computed: true}
 	testkit.AssertResourceContract(t, NewResource(), "nutanix_image_placement_policy", map[string]testkit.AttributeFlags{
-		"id": computed, "ext_id": computed, "name": required, "description": optionalComputed, "placement_type": required,
-		"image_entity_filter": required, "cluster_entity_filter": required, "enforcement_state": computed,
-		"create_time": computed, "last_update_time": computed, "owner_ext_id": computed, "owner_name": computed,
+		"id": testkit.Computed("StringAttribute"), "ext_id": testkit.Computed("StringAttribute"), "name": testkit.Required("StringAttribute"),
+		"description": testkit.OptionalComputed("StringAttribute"), "placement_type": testkit.Required("StringAttribute"),
+		"image_entity_filter": filterContract(), "cluster_entity_filter": filterContract(),
+		"enforcement_state": testkit.Computed("StringAttribute"), "create_time": testkit.Computed("StringAttribute"),
+		"last_update_time": testkit.Computed("StringAttribute"), "owner_ext_id": testkit.Computed("StringAttribute"), "owner_name": testkit.Computed("StringAttribute"),
 	})
+}
+
+func filterContract() testkit.AttributeFlags {
+	return testkit.AttributeFlags{TypeName: "SingleNestedAttribute", Required: true, Nested: map[string]testkit.AttributeFlags{
+		"type":             testkit.Required("StringAttribute"),
+		"category_ext_ids": testkit.Required("ListAttribute"),
+	}}
 }
 
 func TestStateFromRemoteRejectsIncompletePolicy(t *testing.T) {

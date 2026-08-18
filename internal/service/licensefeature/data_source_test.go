@@ -12,11 +12,11 @@ import (
 )
 
 func TestDataSourceContract(t *testing.T) {
-	optional := testkit.AttributeFlags{Optional: true}
-	computed := testkit.AttributeFlags{Computed: true}
 	testkit.AssertDataSourceContract(t, NewDataSource(), "nutanix_license_features_v2", map[string]testkit.AttributeFlags{
-		"page": optional, "limit": optional, "filter": optional, "order_by": optional, "select": optional,
-		"id": computed, "license_feature_entities": computed,
+		"page": testkit.Optional("Int64Attribute"), "limit": testkit.Optional("Int64Attribute"),
+		"filter": testkit.Optional("StringAttribute"), "order_by": testkit.Optional("StringAttribute"),
+		"select": testkit.Optional("StringAttribute"), "id": testkit.Computed("StringAttribute"),
+		"license_feature_entities": testkit.Computed("ListNestedAttribute"),
 	})
 }
 

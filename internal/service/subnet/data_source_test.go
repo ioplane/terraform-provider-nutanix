@@ -10,13 +10,14 @@ import (
 )
 
 func TestDataSourceContract(t *testing.T) {
-	required := testkit.AttributeFlags{Required: true}
-	computed := testkit.AttributeFlags{Computed: true}
 	testkit.AssertDataSourceContract(t, NewDataSource(), "nutanix_subnet_v2", map[string]testkit.AttributeFlags{
-		"id": computed, "ext_id": required, "name": computed, "description": computed, "subnet_type": computed,
-		"network_id": computed, "ip_config": computed, "cluster_reference": computed, "virtual_switch_reference": computed,
-		"vpc_reference": computed, "is_nat_enabled": computed, "is_external": computed, "bridge_name": computed,
-		"is_advanced_networking": computed,
+		"id": testkit.Computed("StringAttribute"), "ext_id": testkit.Required("StringAttribute"),
+		"name": testkit.Computed("StringAttribute"), "description": testkit.Computed("StringAttribute"), "subnet_type": testkit.Computed("StringAttribute"),
+		"network_id": testkit.Computed("Int64Attribute"), "ip_config": testkit.Computed("ListNestedAttribute"),
+		"cluster_reference": testkit.Computed("StringAttribute"), "virtual_switch_reference": testkit.Computed("StringAttribute"),
+		"vpc_reference": testkit.Computed("StringAttribute"), "is_nat_enabled": testkit.Computed("BoolAttribute"),
+		"is_external": testkit.Computed("BoolAttribute"), "bridge_name": testkit.Computed("StringAttribute"),
+		"is_advanced_networking": testkit.Computed("BoolAttribute"),
 	})
 }
 

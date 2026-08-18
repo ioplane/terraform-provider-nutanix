@@ -9,11 +9,10 @@ import (
 )
 
 func TestResourceContract(t *testing.T) {
-	required := testkit.AttributeFlags{Required: true}
-	optionalComputed := testkit.AttributeFlags{Optional: true, Computed: true}
-	computed := testkit.AttributeFlags{Computed: true}
 	testkit.AssertResourceContract(t, NewResource(), "nutanix_category", map[string]testkit.AttributeFlags{
-		"id": computed, "key": required, "value": required, "description": optionalComputed, "owner_uuid": optionalComputed, "type": computed,
+		"id": testkit.Computed("StringAttribute"), "key": testkit.Required("StringAttribute"), "value": testkit.Required("StringAttribute"),
+		"description": testkit.OptionalComputed("StringAttribute"), "owner_uuid": testkit.OptionalComputed("StringAttribute"),
+		"type": testkit.Computed("StringAttribute"),
 	})
 }
 

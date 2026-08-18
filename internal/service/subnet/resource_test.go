@@ -9,14 +9,14 @@ import (
 )
 
 func TestResourceContract(t *testing.T) {
-	required := testkit.AttributeFlags{Required: true}
-	optionalComputed := testkit.AttributeFlags{Optional: true, Computed: true}
-	computed := testkit.AttributeFlags{Computed: true}
 	testkit.AssertResourceContract(t, NewResource(), "nutanix_subnet", map[string]testkit.AttributeFlags{
-		"id": computed, "ext_id": computed, "name": required, "description": optionalComputed, "subnet_type": required,
-		"network_id": optionalComputed, "cluster_reference": optionalComputed, "virtual_switch_reference": optionalComputed,
-		"vpc_reference": optionalComputed, "is_nat_enabled": optionalComputed, "is_external": optionalComputed,
-		"bridge_name": optionalComputed, "is_advanced_networking": optionalComputed,
+		"id": testkit.Computed("StringAttribute"), "ext_id": testkit.Computed("StringAttribute"),
+		"name": testkit.Required("StringAttribute"), "description": testkit.OptionalComputed("StringAttribute"),
+		"subnet_type": testkit.Required("StringAttribute"), "network_id": testkit.OptionalComputed("Int64Attribute"),
+		"cluster_reference": testkit.OptionalComputed("StringAttribute"), "virtual_switch_reference": testkit.OptionalComputed("StringAttribute"),
+		"vpc_reference": testkit.OptionalComputed("StringAttribute"), "is_nat_enabled": testkit.OptionalComputed("BoolAttribute"),
+		"is_external": testkit.OptionalComputed("BoolAttribute"), "bridge_name": testkit.OptionalComputed("StringAttribute"),
+		"is_advanced_networking": testkit.OptionalComputed("BoolAttribute"),
 	})
 }
 
