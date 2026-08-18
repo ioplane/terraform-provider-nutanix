@@ -92,9 +92,11 @@ OpenAPI digest is `77ec78bd2c4b89e2e0f96f8be475b6983167c814e977b3a364804b5507299
 v4.3 behavior from v4.4.
 
 The v4.3 operation qualification is recorded in [`docs/contract.md`](contract.md). Three read-only
-inventories are accepted provisionally (`listLicenses`, `listLicenseKeys`, and `listFeatures`), nine
-read-only candidates are deferred, and seven mutation/internal operations are rejected from the
-current provider scope. Product acceptance remains a separate deferred gate.
+inventories are implemented but demoted to research/provisional status (`listLicenses`,
+`listLicenseKeys`, and `listFeatures`) because the selected manifest is v4.4; they are not an
+accepted compatibility surface until `ntnx-c57.3` closes. Nine read-only candidates are deferred,
+and seven mutation/internal operations are rejected from the current provider scope. Product
+acceptance remains a separate deferred gate.
 
 The v4.0 `nutanix-re` finding remains historical discrepancy evidence. In particular, its
 `creationDate` and `isDeleted` LicenseKey fields do not occur in the v4.3 Portal LicenseKey schema;

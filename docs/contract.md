@@ -134,7 +134,7 @@ and 19 operations. The matrix below qualifies every operation against the curren
 | --- | --- | --- | --- |
 | `getEula` | `GET /licensing/v4.3/agreements/eula` | Deferred | Read-only, but the EULA response has no reviewed Terraform identity/state contract |
 | `addUser` | `POST /licensing/v4.3/agreements/eula/$actions/add-user` | Rejected | Internal EULA user mutation; outside the current provider scope |
-| `listLicenseKeys` | `GET /licensing/v4.3/config/license-keys` | Accepted, provisional | Implemented inventory with exact Portal schema and reviewed nullable expansions |
+| `listLicenseKeys` | `GET /licensing/v4.3/config/license-keys` | Implemented, demoted | Source implementation exists, but the selected v4.4 manifest does not authorize promotion of the v4.3 wire contract |
 | `addLicenseKey` | `POST /licensing/v4.3/config/license-keys` | Rejected | Mutation requires a separate idempotence, dry-run, secret handling, and product gate |
 | `getLicenseKeyById` | `GET /licensing/v4.3/config/license-keys/{extId}` | Deferred | Read-only candidate; import, identity, and product acceptance are not approved |
 | `deleteLicenseKeyById` | `DELETE /licensing/v4.3/config/license-keys/{extId}` | Rejected | Destructive mutation; no reviewed rollback and product gate |
@@ -142,8 +142,8 @@ and 19 operations. The matrix below qualifies every operation against the curren
 | `associateLicenseKeys` | `POST /licensing/v4.3/config/license-keys/{extId}/$actions/associate-license-keys` | Rejected | Association mutation; lifecycle and rollback contract are absent |
 | `reclaimLicenseKey` | `POST /licensing/v4.3/config/license-keys/{extId}/$actions/reclaim` | Rejected | Reclaim mutation; quantity, task, and rollback contract are absent |
 | `listReclaimLicenseTokens` | `GET /licensing/v4.3/config/reclaim-license-tokens` | Deferred | Read-only candidate; token sensitivity and state projection require review |
-| `listFeatures` | `GET /licensing/v4.3/config/features` | Accepted, provisional | Implemented inventory with exact union-value and query identity contract |
-| `listLicenses` | `GET /licensing/v4.3/config/licenses` | Accepted, provisional | Implemented applied-license inventory with reviewed `consumptionDetails` expansion |
+| `listFeatures` | `GET /licensing/v4.3/config/features` | Implemented, demoted | Source implementation exists, but v4.3 `valueType` is not present in the selected v4.4 schema |
+| `listLicenses` | `GET /licensing/v4.3/config/licenses` | Implemented, demoted | Source implementation exists, but the selected v4.4 manifest does not authorize promotion of the v4.3 wire contract |
 | `listSettings` | `GET /licensing/v4.3/config/settings` | Deferred | Read-only candidate; setting sensitivity and stable state projection require review |
 | `listViolations` | `GET /licensing/v4.3/config/violations` | Deferred | Read-only candidate; nested violation semantics and product acceptance require review |
 | `listAllowances` | `GET /licensing/v4.3/config/allowances` | Deferred | Read-only candidate; nested allowance limits and state shape are not approved |
@@ -156,7 +156,8 @@ The repository manifest currently locks Licensing v4.4, while the implementation
 targets v4.3. The v4.4 lock is not silently treated as v4.3 evidence: its artifact has 20 paths and
 22 operations and changes selected schemas (for example, v4.4 `Feature` has no `valueType`, while
 v4.3 does). A separate version-lock reconciliation must complete before changing the provider paths
-or state model.
+or state model. Until `ntnx-c57.3` closes, all three implemented v4.3 data sources are demoted
+research/provisional surfaces and are not an accepted compatibility contract for downstream users.
 
 The `nutanix-re` v4.0 finding is discrepancy evidence only. Its `creationDate` and `isDeleted`
 fields are absent from the v4.3 `LicenseKey` schema, so they remain explicitly excluded from state.
