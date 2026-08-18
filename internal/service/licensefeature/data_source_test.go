@@ -8,7 +8,17 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/ioplane/terraform-provider-nutanix/internal/nutanix/licensing"
+	"github.com/ioplane/terraform-provider-nutanix/internal/service/testkit"
 )
+
+func TestDataSourceContract(t *testing.T) {
+	optional := testkit.AttributeFlags{Optional: true}
+	computed := testkit.AttributeFlags{Computed: true}
+	testkit.AssertDataSourceContract(t, NewDataSource(), "nutanix_license_features_v2", map[string]testkit.AttributeFlags{
+		"page": optional, "limit": optional, "filter": optional, "order_by": optional, "select": optional,
+		"id": computed, "license_feature_entities": computed,
+	})
+}
 
 func TestStateFromFeaturesNormalizesUnionValue(t *testing.T) {
 	name, valueType, licenseType := "dp_recovery", "BOOLEAN", "PRISM"
