@@ -123,6 +123,47 @@ an exact string and interpreted with `value_type`, because the Terraform Plugin 
 support dynamic types inside list nested attributes. The caller-only query identity includes
 `$page`, `$limit`, `$filter`, `$orderby`, and `$select`.
 
+### Licensing v4.3 operation qualification
+
+The direct Portal v4.3 artifact observed on 2026-08-18 contains 17 paths and 19 operations. Nutanix
+MCP document `api-swagger-licensing-v4.3-all` independently reports version 4.3.1, 17 endpoints,
+and 19 operations. The matrix below qualifies every operation against the current provider scope;
+`rejected` means rejected from this read-only provider slice, not that the vendor operation is invalid.
+
+| Operation | Portal v4.3 path | Decision | Evidence-bound reason |
+| --- | --- | --- | --- |
+| `getEula` | `GET /licensing/v4.3/agreements/eula` | Deferred | Read-only, but the EULA response has no reviewed Terraform identity/state contract |
+| `addUser` | `POST /licensing/v4.3/agreements/eula/$actions/add-user` | Rejected | Internal EULA user mutation; outside the current provider scope |
+| `listLicenseKeys` | `GET /licensing/v4.3/config/license-keys` | Implemented, demoted | Source implementation exists, but the selected v4.4 manifest does not authorize promotion of the v4.3 wire contract |
+| `addLicenseKey` | `POST /licensing/v4.3/config/license-keys` | Rejected | Mutation requires a separate idempotence, dry-run, secret handling, and product gate |
+| `getLicenseKeyById` | `GET /licensing/v4.3/config/license-keys/{extId}` | Deferred | Read-only candidate; import, identity, and product acceptance are not approved |
+| `deleteLicenseKeyById` | `DELETE /licensing/v4.3/config/license-keys/{extId}` | Rejected | Destructive mutation; no reviewed rollback and product gate |
+| `assignLicenseKeys` | `POST /licensing/v4.3/config/$actions/assign-license-keys` | Rejected | Cluster assignment mutation; task/idempotence and product gate are absent |
+| `associateLicenseKeys` | `POST /licensing/v4.3/config/license-keys/{extId}/$actions/associate-license-keys` | Rejected | Association mutation; lifecycle and rollback contract are absent |
+| `reclaimLicenseKey` | `POST /licensing/v4.3/config/license-keys/{extId}/$actions/reclaim` | Rejected | Reclaim mutation; quantity, task, and rollback contract are absent |
+| `listReclaimLicenseTokens` | `GET /licensing/v4.3/config/reclaim-license-tokens` | Deferred | Read-only candidate; token sensitivity and state projection require review |
+| `listFeatures` | `GET /licensing/v4.3/config/features` | Implemented, demoted | Source implementation exists, but v4.3 `valueType` is not present in the selected v4.4 schema |
+| `listLicenses` | `GET /licensing/v4.3/config/licenses` | Implemented, demoted | Source implementation exists, but the selected v4.4 manifest does not authorize promotion of the v4.3 wire contract |
+| `listSettings` | `GET /licensing/v4.3/config/settings` | Deferred | Read-only candidate; setting sensitivity and stable state projection require review |
+| `listViolations` | `GET /licensing/v4.3/config/violations` | Deferred | Read-only candidate; nested violation semantics and product acceptance require review |
+| `listAllowances` | `GET /licensing/v4.3/config/allowances` | Deferred | Read-only candidate; nested allowance limits and state shape are not approved |
+| `listEntitlements` | `GET /licensing/v4.3/config/entitlements` | Deferred | Read-only candidate; cluster identity and nested entitlement state require review |
+| `listCompliances` | `GET /licensing/v4.3/config/compliances` | Deferred | Read-only candidate; service compliance state and product acceptance require review |
+| `listRecommendations` | `GET /licensing/v4.3/config/recommendations` | Deferred | Read-only candidate; recommendation freshness and state semantics require review |
+| `syncLicenseState` | `POST /licensing/v4.3/config/$actions/sync-license-state` | Rejected | State-sync mutation; task, idempotence, and live product gate are absent |
+
+The repository manifest currently locks Licensing v4.4, while the implementation above intentionally
+targets v4.3. The v4.4 lock is not silently treated as v4.3 evidence: its artifact has 20 paths and
+22 operations and changes selected schemas (for example, v4.4 `Feature` has no `valueType`, while
+v4.3 does). A separate version-lock reconciliation must complete before changing the provider paths
+or state model. Until `ntnx-c57.3` closes, all three implemented v4.3 data sources are demoted
+research/provisional surfaces and are not an accepted compatibility contract for downstream users.
+
+The `nutanix-re` v4.0 finding is discrepancy evidence only. Its `creationDate` and `isDeleted`
+fields are absent from the v4.3 `LicenseKey` schema, so they remain explicitly excluded from state.
+Its v4.0 portal-setting, trial, and reset routes are not present in the v4.3 Portal operation set
+and are treated as version drift rather than implementation candidates.
+
 The category resource manages only user-defined categories. `key` is immutable and forces
 replacement; `value`, `description`, and `owner_uuid` are mutable through the conditional PUT.
 The API requires `If-Match` for updates, so the client reads the current ETag immediately before

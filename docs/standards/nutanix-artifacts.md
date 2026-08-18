@@ -118,6 +118,15 @@ The provider maps `name`, `valueType`, the boolean-or-integer `value`, `licenseT
 `licenseCategory`, `licenseSubCategory`, and `scope`. The pinned Portal operation block was
 reviewed on 2026-08-10; MCP independently corroborates the same Licensing v4.3 endpoint inventory.
 
+The current manifest selection is now Licensing v4.4, not v4.3. The v4.4 locked artifact is the
+wire authority for future v4.4 work, but it is not interchangeable with the v4.3 implementation
+contract: v4.4 has 20 paths and 22 operations, and its `Feature` schema omits v4.3 `valueType`.
+The provider therefore keeps the three v4.3 data sources explicitly provisional until the lock and
+implementation version are reconciled; they are demoted research surfaces and are not an accepted
+compatibility contract. The direct v4.3 Portal artifact observed on 2026-08-18 has
+SHA-256 `d5475e4a2ec572d0f87381229160ed2f663cd4fc86d56c57fd75627d7724d0a5`; the locked v4.4 digest
+is `77ec78bd2c4b89e2e0f96f8be475b6983167c814e977b3a364804b5507299c2f`.
+
 Secondary evidence is accepted only when all applicable integrity checks pass:
 
 1. immutable repository and commit provenance;
