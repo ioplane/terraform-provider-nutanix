@@ -120,6 +120,7 @@ reviewed on 2026-08-10; MCP independently corroborates the same Licensing v4.3 e
 
 The current manifest selection is now Licensing v4.4, not v4.3. The v4.4 locked artifact is the
 wire authority for future v4.4 work, but it is not interchangeable with the v4.3 implementation
+contract: v4.4 has 20 paths and 22 operations, and its `Feature` schema omits v4.3 `valueType`.
 The provider therefore keeps the three v4.3 data sources explicitly provisional until the lock and
 implementation version are reconciled; they are demoted research surfaces and are not an accepted
 compatibility contract. The direct v4.3 Portal artifact observed on 2026-08-18 has
