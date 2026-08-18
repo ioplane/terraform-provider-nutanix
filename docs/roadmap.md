@@ -69,16 +69,37 @@ the Developer Portal lock and exact-operation corroboration remain the implement
 | Portal version agreement | 15 of 18 indexed v4 families | Preserve the repository-selected version per namespace |
 | Version conflicts | AIOps, Prism, and VMM | Qualify separately; do not replace a locked version |
 | Portal-only namespace | Storage `v4.0.a3` preview | Keep preview status explicit and fail closed |
-| Licensing | Portal v4.3.1 and MCP agree on 17 paths/19 operations; `listLicenses`, `listLicenseKeys`, and `listFeatures` are exact | Keep all three read-only inventories provisional until product verification and complete operation evidence gates pass |
+| Licensing | Direct Portal v4.3 and MCP agree on 17 paths/19 operations; `listLicenses`, `listLicenseKeys`, and `listFeatures` are exact. The repository manifest now selects GA v4.4 (20 paths/22 operations) | Keep the three v4.3 inventories provisional; reconcile the v4.4 lock before changing implementation paths or state |
 | PC 7.6 extraction | Resource Groups, security, Objects data-plane, alerts, and SaaS signals | Treat binary and protobuf results as discrepancy evidence, not REST contracts |
 | PC 7.6 runtime gaps | Projects 2.0, Security Profiles, and Storage Dashboard are Java microservices absent from offline SDK/API artifacts | Require live PC 7.6 extraction and exact public-contract corroboration before adding provider surfaces |
 | Objects and LCM updates | Objects Manager inspection added 86 internal gRPC handlers; LCM inspection added 23 services/193 RPC methods | Keep as product research and discrepancy evidence; do not infer REST routes or Terraform contracts |
-| Licensing correction | `licensing-go-client/v4` v4.3 is publicly available; previous RE-only gap was withdrawn | Use the official v4.3 artifact and exact operation gate; SDK remains comparison-only |
+| Licensing correction | `licensing-go-client/v4` v4.3 is publicly available; previous RE-only gap was withdrawn | Use the direct Portal v4.3 artifact and exact operation gate for the current slice; SDK remains comparison-only |
 
 The source snapshot contains stale human summaries that report 2,521 total operations, 925 v4
 operations, and 1,477 concrete paths. The machine records resolve to 2,516, 920, and 1,435 non-null
 path fields respectively. Provider planning uses independently computed values and never promotes
 a source claim that conflicts with its underlying records.
+
+### Licensing version-qualified audit — 2026-08-18
+
+The current v4.3 implementation is backed by the direct Portal artifact
+[`licensing/v4.3/yaml`](https://developers.nutanix.com/api/v1/namespaces/licensing/versions/v4.3/yaml),
+observed with SHA-256 `d5475e4a2ec572d0f87381229160ed2f663cd4fc86d56c57fd75627d7724d0a5`, and by MCP
+document `api-swagger-licensing-v4.3-all`. Both sources report the same 17 paths and 19 operations.
+The repository lock at `specs/nutanix/manifest.json` instead selects Licensing v4.4, whose locked
+OpenAPI digest is `77ec78bd2c4b89e2e0f96f8be475b6983167c814e977b3a364804b5507299c2f`; it contains
+20 paths and 22 operations. This is an explicit version-alignment debt, not permission to infer
+v4.3 behavior from v4.4.
+
+The v4.3 operation qualification is recorded in [`docs/contract.md`](contract.md). Three read-only
+inventories are accepted provisionally (`listLicenses`, `listLicenseKeys`, and `listFeatures`), nine
+read-only candidates are deferred, and seven mutation/internal operations are rejected from the
+current provider scope. Product acceptance remains a separate deferred gate.
+
+The v4.0 `nutanix-re` finding remains historical discrepancy evidence. In particular, its
+`creationDate` and `isDeleted` LicenseKey fields do not occur in the v4.3 Portal LicenseKey schema;
+they are therefore excluded from Terraform state. Its portal-setting, trial, and reset routes are
+not v4.3 operations and are labeled version drift.
 
 ## Expansion boundaries
 
